@@ -1,0 +1,329 @@
+(function () {
+  'use strict';
+
+  var state = {
+    selectedId: null,
+    token: null,
+    dadosOriginais: null
+  };
+
+  var MAX_ANEXO_BYTES = 10 * 1024 * 1024;
+  var MIME_PERMITIDOS = [
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  ];
+
+  var els = {};
+
+  document.addEventListener('DOMContentLoaded', function () {
+    cacheEls();
+    bindEvents();
+  });
+
+  function cacheEls() {
+    els.searchInput = document.getElementById('search-input');
+    els.searchResults = document.getElementById('search-results');
+    els.searchHint = document.getElementById('search-hint');
+
+    els.stepSearch = document.getElementById('step-search');
+    els.stepPassword = document.getElementById('step-password');
+    els.stepData = document.getElementById('step-data');
+    els.stepSuccess = document.getElementById('step-success');
+
+    els.passwordSelectedName = document.getElementById('password-selected-name');
+    els.passwordInput = document.getElementById('password-input');
+    els.passwordError = document.getElementById('password-error');
+    els.btnValidarSenha = document.getElementById('btn-validar-senha');
+    els.btnBackToSearch = document.getElementById('btn-back-to-search');
+
+    els.fMatricula = document.getElementById('f-matricula');
+    els.fNome = document.getElementById('f-nome');
+    els.fCpf = document.getElementById('f-cpf');
+    els.fClasse = document.getElementById('f-classe');
+    els.fRegional = document.getElementById('f-regional');
+    els.fRequereu40h = document.getElementById('f-requereu40h');
+    els.fDataRequerimento = document.getElementById('f-data-requerimento');
+    els.fStatus = document.getElementById('f-status');
+    els.fRequerimentoTexto = document.getElementById('f-requerimento-texto');
+    els.fAnexo = document.getElementById('f-anexo');
+    els.anexoError = document.getElementById('anexo-error');
+
+    els.btnConfirmar = document.getElementById('btn-confirmar');
+    els.btnCorrigir = document.getElementById('btn-corrigir');
+    els.submitError = document.getElementById('submit-error');
+
+    els.successMessage = document.getElementById('success-message');
+    els.successRequerimento = document.getElementById('success-requerimento');
+
+    els.loadingOverlay = document.getElementById('loading-overlay');
+  }
+
+  function bindEvents() {
+    var debounceTimer = null;
+    els.searchInput.addEventListener('input', function () {
+      var termo = els.searchInput.value;
+      clearTimeout(debounceTimer);
+      if (termo.trim().length < 2) {
+        els.searchResults.innerHTML = '';
+        els.searchHint.textContent = 'Digite ao menos 2 letras para buscar.';
+        els.searchHint.classList.remove('hidden');
+        return;
+      }
+      debounceTimer = setTimeout(function () {
+        buscar(termo);
+      }, 300);
+    });
+
+    els.btnBackToSearch.addEventListener('click', function () {
+      state.selectedId = null;
+      els.passwordInput.value = '';
+      hideError(els.passwordError);
+      showStep('search');
+    });
+
+    els.btnValidarSenha.addEventListener('click', validarSenha);
+    els.passwordInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') validarSenha();
+    });
+
+    els.fAnexo.addEventListener('change', function () {
+      hideError(els.anexoError);
+      var file = els.fAnexo.files[0];
+      if (!file) return;
+      if (MIME_PERMITIDOS.indexOf(file.type) === -1) {
+        showError(els.anexoError, 'Tipo de arquivo não permitido. Envie PDF, JPG, PNG ou DOCX.');
+        els.fAnexo.value = '';
+        return;
+      }
+      if (file.size > MAX_ANEXO_BYTES) {
+        showError(els.anexoError, 'Arquivo excede o tamanho máximo permitido (10MB).');
+        els.fAnexo.value = '';
+      }
+    });
+
+    els.btnConfirmar.addEventListener('click', function () {
+      enviar('confirmar');
+    });
+    els.btnCorrigir.addEventListener('click', function () {
+      enviar('corrigir');
+    });
+  }
+
+  function buscar(termo) {
+    setLoading(false); // busca não usa overlay de tela cheia (mantém digitação fluida)
+    google.script.run
+      .withSuccessHandler(function (resultados) {
+        renderResultados(resultados);
+      })
+      .withFailureHandler(function (err) {
+        els.searchHint.textContent = 'Erro ao buscar. Tente novamente.';
+        els.searchHint.classList.remove('hidden');
+      })
+      .buscarServidores(termo);
+  }
+
+  function renderResultados(resultados) {
+    els.searchResults.innerHTML = '';
+    if (!resultados || resultados.length === 0) {
+      els.searchHint.textContent = 'Nenhum nome encontrado.';
+      els.searchHint.classList.remove('hidden');
+      return;
+    }
+    els.searchHint.classList.add('hidden');
+
+    resultados.forEach(function (r) {
+      var li = document.createElement('li');
+      var nameSpan = document.createElement('span');
+      nameSpan.className = 'result-name';
+      nameSpan.textContent = r.nome;
+      li.appendChild(nameSpan);
+      if (r.info) {
+        var infoSpan = document.createElement('span');
+        infoSpan.className = 'result-info';
+        infoSpan.textContent = r.info;
+        li.appendChild(infoSpan);
+      }
+      li.addEventListener('click', function () {
+        selecionarServidor(r.id, r.nome);
+      });
+      els.searchResults.appendChild(li);
+    });
+  }
+
+  function selecionarServidor(id, nome) {
+    state.selectedId = id;
+    els.passwordSelectedName.textContent = nome;
+    els.passwordInput.value = '';
+    hideError(els.passwordError);
+    showStep('password');
+    setTimeout(function () { els.passwordInput.focus(); }, 50);
+  }
+
+  function validarSenha() {
+    var senha = els.passwordInput.value.trim();
+    if (senha.length !== 4) {
+      showError(els.passwordError, 'Digite os 4 dígitos da senha.');
+      return;
+    }
+    hideError(els.passwordError);
+    els.btnValidarSenha.disabled = true;
+    setLoading(true);
+
+    google.script.run
+      .withSuccessHandler(function (resp) {
+        setLoading(false);
+        els.btnValidarSenha.disabled = false;
+        if (!resp.ok) {
+          showError(els.passwordError, resp.message);
+          els.passwordInput.value = '';
+          return;
+        }
+        state.token = resp.token;
+        state.dadosOriginais = resp.dados;
+        preencherFormulario(resp.dados);
+        showStep('data');
+      })
+      .withFailureHandler(function (err) {
+        setLoading(false);
+        els.btnValidarSenha.disabled = false;
+        showError(els.passwordError, 'Erro ao validar. Tente novamente.');
+      })
+      .validarSenha(state.selectedId, senha);
+  }
+
+  function preencherFormulario(dados) {
+    els.fMatricula.value = dados.matricula || '';
+    els.fNome.value = dados.nome || '';
+    els.fCpf.value = dados.cpfMascarado || '';
+    els.fClasse.value = dados.classe || '';
+    els.fRegional.value = dados.regional || '';
+    els.fRequereu40h.value = (dados.requereu40h === 'Não' || dados.requereu40h === 'Nao') ? 'Não' : 'Sim';
+    els.fDataRequerimento.value = dados.dataRequerimento || '';
+    els.fStatus.value = dados.status || '';
+    els.fRequerimentoTexto.value = '';
+    els.fAnexo.value = '';
+    hideError(els.submitError);
+    hideError(els.anexoError);
+  }
+
+  function lerArquivoComoBase64(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        var base64 = reader.result.split(',')[1];
+        resolve({
+          base64: base64,
+          mimeType: file.type,
+          filename: file.name
+        });
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function enviar(acao) {
+    hideError(els.submitError);
+
+    if (!state.token) {
+      showError(els.submitError, 'Sessão expirada. Refaça a busca e a validação de senha.');
+      return;
+    }
+
+    var file = els.fAnexo.files[0];
+    if (file && (MIME_PERMITIDOS.indexOf(file.type) === -1 || file.size > MAX_ANEXO_BYTES)) {
+      showError(els.submitError, 'Verifique o arquivo anexado antes de continuar.');
+      return;
+    }
+
+    setLoading(true);
+    els.btnConfirmar.disabled = true;
+    els.btnCorrigir.disabled = true;
+
+    var montarPayloadEEnviar = function (anexoPayload) {
+      var payload = {
+        acao: acao,
+        camposEditados: {
+          nome: els.fNome.value,
+          classe: els.fClasse.value,
+          regional: els.fRegional.value,
+          requereu40h: els.fRequereu40h.value,
+          dataRequerimento: els.fDataRequerimento.value
+        },
+        requerimentoTexto: els.fRequerimentoTexto.value,
+        anexo: anexoPayload || null
+      };
+
+      google.script.run
+        .withSuccessHandler(function (resp) {
+          setLoading(false);
+          els.btnConfirmar.disabled = false;
+          els.btnCorrigir.disabled = false;
+          if (!resp.ok) {
+            showError(els.submitError, resp.message || 'Não foi possível registrar. Tente novamente.');
+            return;
+          }
+          mostrarSucesso(resp);
+        })
+        .withFailureHandler(function (err) {
+          setLoading(false);
+          els.btnConfirmar.disabled = false;
+          els.btnCorrigir.disabled = false;
+          showError(els.submitError, 'Erro ao registrar: ' + (err && err.message ? err.message : 'tente novamente.'));
+        })
+        .registrarConfirmacao(state.token, payload);
+    };
+
+    if (file) {
+      lerArquivoComoBase64(file)
+        .then(montarPayloadEEnviar)
+        .catch(function () {
+          setLoading(false);
+          els.btnConfirmar.disabled = false;
+          els.btnCorrigir.disabled = false;
+          showError(els.submitError, 'Erro ao ler o arquivo anexado.');
+        });
+    } else {
+      montarPayloadEEnviar(null);
+    }
+  }
+
+  function mostrarSucesso(resp) {
+    var acaoTexto = resp.acao === 'corrigir'
+      ? 'Sua correção foi registrada e será validada pela SEGEP.'
+      : 'Seus dados foram confirmados.';
+    els.successMessage.textContent = acaoTexto + ' Registrado em ' + resp.timestamp + '.';
+
+    if (resp.requerimentoRecebido) {
+      els.successRequerimento.textContent = 'Seu requerimento (texto e/ou anexo) também foi recebido e está pendente de análise.';
+      els.successRequerimento.classList.remove('hidden');
+    } else {
+      els.successRequerimento.classList.add('hidden');
+    }
+
+    showStep('success');
+  }
+
+  function showStep(step) {
+    els.stepSearch.classList.toggle('hidden', step !== 'search');
+    els.stepPassword.classList.toggle('hidden', step !== 'password');
+    els.stepData.classList.toggle('hidden', step !== 'data');
+    els.stepSuccess.classList.toggle('hidden', step !== 'success');
+  }
+
+  function setLoading(isLoading) {
+    els.loadingOverlay.classList.toggle('hidden', !isLoading);
+  }
+
+  function showError(el, message) {
+    el.textContent = message;
+    el.classList.remove('hidden');
+  }
+
+  function hideError(el) {
+    el.textContent = '';
+    el.classList.add('hidden');
+  }
+})();

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Confirmação de Dados Cadastrais</title>
+  <style>
+    <?!= include('CSS'); ?>
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <h1>Confirmação de Dados — Majoração de Jornada 40h</h1>
+      <p class="subtitle">Confira seus dados de requerimento de majoração de jornada semanal de 30h para 40h.</p>
+    </header>
+
+    <main id="app-main">
+
+      <!-- ETAPA 1: BUSCA POR NOME -->
+      <section id="step-search" class="step">
+        <label for="search-input">Digite seu nome completo</label>
+        <input type="text" id="search-input" autocomplete="off" placeholder="Ex: Maria da Silva" />
+        <ul id="search-results" class="result-list" aria-live="polite"></ul>
+        <p id="search-hint" class="hint">Digite ao menos 2 letras para buscar.</p>
+      </section>
+
+      <!-- ETAPA 2: SENHA -->
+      <section id="step-password" class="step hidden">
+        <button type="button" class="link-back" id="btn-back-to-search">&larr; Voltar para a busca</button>
+        <p>Servidor(a) selecionado(a): <strong id="password-selected-name"></strong></p>
+        <label for="password-input">Senha (últimos 4 dígitos do seu CPF)</label>
+        <input type="password" id="password-input" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" />
+        <button type="button" id="btn-validar-senha" class="btn btn-primary">Confirmar identidade</button>
+        <p id="password-error" class="error-message hidden"></p>
+      </section>
+
+      <!-- ETAPA 3: DADOS + REQUERIMENTO -->
+      <section id="step-data" class="step hidden">
+        <h2>Seus dados</h2>
+        <p class="hint">Confira os dados abaixo. Se algo estiver incorreto, edite o campo e clique em "Enviar correção".</p>
+
+        <form id="data-form">
+          <div class="field">
+            <label for="f-matricula">Matrícula</label>
+            <input type="text" id="f-matricula" disabled />
+          </div>
+          <div class="field">
+            <label for="f-nome">Nome</label>
+            <input type="text" id="f-nome" />
+          </div>
+          <div class="field">
+            <label for="f-cpf">CPF</label>
+            <input type="text" id="f-cpf" disabled />
+            <p class="hint">O CPF não é exibido por completo, por motivos de segurança (LGPD). Alterações de CPF devem ser tratadas diretamente com a SEGEP.</p>
+          </div>
+          <div class="field">
+            <label for="f-classe">Classe</label>
+            <input type="text" id="f-classe" />
+          </div>
+          <div class="field">
+            <label for="f-regional">Regional</label>
+            <input type="text" id="f-regional" />
+          </div>
+          <div class="field">
+            <label for="f-requereu40h">Requereu majoração para 40h?</label>
+            <select id="f-requereu40h">
+              <option value="Sim">Sim</option>
+              <option value="Não">Não</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="f-data-requerimento">Data do requerimento</label>
+            <input type="text" id="f-data-requerimento" placeholder="dd/mm/aaaa" />
+          </div>
+          <div class="field">
+            <label for="f-status">Status atual</label>
+            <input type="text" id="f-status" disabled />
+          </div>
+
+          <hr />
+
+          <h2>Requerimento (opcional)</h2>
+          <p class="hint">Use este espaço para justificativa, observação ou pedido relacionado à majoração de jornada. Não é obrigatório.</p>
+          <div class="field">
+            <label for="f-requerimento-texto">Texto do requerimento</label>
+            <textarea id="f-requerimento-texto" rows="5" maxlength="4000" placeholder="Escreva aqui, se necessário..."></textarea>
+          </div>
+          <div class="field">
+            <label for="f-anexo">Anexo (opcional) — PDF, JPG, PNG ou DOCX, até 10MB</label>
+            <input type="file" id="f-anexo" accept=".pdf,.jpg,.jpeg,.png,.docx" />
+            <p id="anexo-error" class="error-message hidden"></p>
+          </div>
+
+          <div class="actions">
+            <button type="button" id="btn-confirmar" class="btn btn-primary">Confirmar dados corretos</button>
+            <button type="button" id="btn-corrigir" class="btn btn-secondary">Enviar correção</button>
+          </div>
+          <p id="submit-error" class="error-message hidden"></p>
+        </form>
+      </section>
+
+      <!-- ETAPA 4: SUCESSO -->
+      <section id="step-success" class="step hidden">
+        <div class="success-box">
+          <h2>Tudo certo!</h2>
+          <p id="success-message"></p>
+          <p id="success-requerimento" class="hidden"></p>
+        </div>
+      </section>
+
+      <!-- LOADING -->
+      <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="spinner"></div>
+      </div>
+
+    </main>
+
+    <footer class="app-footer">
+      <p>SEGEP — Secretaria Executiva de Gestão de Pessoas</p>
+    </footer>
+  </div>
+
+  <script>
+    <?!= include('JS'); ?>
+  </script>
+</body>
+</html>
