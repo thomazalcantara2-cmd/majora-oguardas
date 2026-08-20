@@ -57,19 +57,13 @@
             <p class="hint">O CPF não é exibido por completo, por motivos de segurança (LGPD). Alterações de CPF devem ser tratadas diretamente com a SEGEP.</p>
           </div>
           <div class="field">
-            <label for="f-classe">Classe</label>
-            <input type="text" id="f-classe" />
+            <label for="f-ordem">Ordem</label>
+            <input type="text" id="f-ordem" disabled />
           </div>
           <div class="field">
-            <label for="f-requereu40h">Requereu majoração para 40h?</label>
-            <select id="f-requereu40h">
-              <option value="Sim">Sim</option>
-              <option value="Não">Não</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="f-data-requerimento">Data do requerimento</label>
-            <input type="text" id="f-data-requerimento" placeholder="dd/mm/aaaa" />
+            <label for="f-data-requerimento">Data/hora do requerimento</label>
+            <input type="text" id="f-data-requerimento" disabled />
+            <p class="hint">Ordem e data/hora são dados do protocolo original e não podem ser alterados por aqui. Se algo estiver errado, procure a SEGEP diretamente.</p>
           </div>
           <div class="field">
             <label for="f-status">Status atual</label>

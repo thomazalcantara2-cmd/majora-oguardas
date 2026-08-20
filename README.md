@@ -28,37 +28,38 @@ rodar `inicializarPlanilha()` uma vez para criar os cabeçalhos, ver seção 3).
 
 ### Aba `Cadastro` (pré-carregada por você)
 
-Sua lista de origem vem como `Ordem | CPF | MATR. | NOME | CLASSE | DATA`. A
-coluna `Ordem` é só a numeração da sua planilha de trabalho e não precisa ir
-para o sistema. O mapeamento para a aba `Cadastro` é:
+Sua lista de origem vem como `Ordem | CPF | MATR. | NOME | CLASSE | DATA`. O
+mapeamento para a aba `Cadastro` é:
 
 | Coluna | Nome | Vem de | Observações |
 |---|---|---|---|
 | A | `Matrícula` | `MATR.` | Identificador único do servidor |
-| B | `Nome` | `NOME` | Nome completo |
+| B | `Nome` | `NOME` | Nome completo — único campo editável pelo próprio servidor |
 | C | `CPF` | `CPF` | Pode nascer vazio e ser preenchido depois, conforme o cruzamento com a base da SEGEP for avançando — só passa a valer como senha de acesso quando estiver preenchido naquela linha. Aceita com ou sem pontuação (o sistema normaliza) |
-| D | `Classe` | `CLASSE` | Ex: GM I, GM II, Inspetor, Subinspetor, Subinspetora, Inspetora |
-| E | `Requereu_40h` | *(não existe na lista de origem)* | A lista inteira é composta por quem já requereu a majoração, então esta coluna deve ser `Sim` em todas as linhas — rode `preencherRequereu40hSeVazio()` uma vez para preencher automaticamente onde estiver em branco |
-| F | `Data_Requerimento` | `DATA` | Data do requerimento original de majoração |
-| G | `Status_Confirmação` | *(gerado pelo sistema)* | Preenchido pelo sistema: vazio/`Pendente`, `Confirmado`, ou `Corrigido — aguardando validação da SEGEP` |
-| H | `Data_Confirmação` | *(gerado pelo sistema)* | Preenchida pelo sistema no momento em que o servidor confirma/corrige |
+| D | `Classe` | `CLASSE` | Ex: GM I, GM II, Inspetor, Subinspetor, Subinspetora, Inspetora. **Não aparece na página** — fica só na planilha, para uso interno da SEGEP |
+| E | `Ordem` | `Ordem` | Número de ordem do protocolo original. Exibido na página, mas **somente leitura** |
+| F | `Data_Requerimento` | `DATA` | Data (e hora, se houver) do requerimento original de majoração. Exibido na página, mas **somente leitura** |
+| G | `Requereu_40h` | *(não existe na lista de origem)* | A lista inteira é composta por quem já requereu a majoração, então esta coluna deve ser `Sim` em todas as linhas — rode `preencherRequereu40hSeVazio()` uma vez para preencher automaticamente onde estiver em branco. **Não aparece na página** |
+| H | `Status_Confirmação` | *(gerado pelo sistema)* | Preenchido pelo sistema: vazio/`Pendente`, `Confirmado`, ou `Corrigido — aguardando validação da SEGEP` |
+| I | `Data_Confirmação` | *(gerado pelo sistema)* | Preenchida pelo sistema no momento em que o servidor confirma/corrige |
 
 **Colunas de controle do sistema (não fazem parte da lista original — são criadas e
 usadas apenas para limitar tentativas de senha; não edite manualmente):**
 
 | Coluna | Nome | Observações |
 |---|---|---|
-| I | `Tentativas_Falhas` | Contador de tentativas de senha incorretas para aquele registro |
-| J | `Bloqueado_Até` | Timestamp até quando o acesso àquele registro fica bloqueado, após 5 tentativas erradas |
+| J | `Tentativas_Falhas` | Contador de tentativas de senha incorretas para aquele registro |
+| K | `Bloqueado_Até` | Timestamp até quando o acesso àquele registro fica bloqueado, após 5 tentativas erradas |
 
 A primeira linha deve conter os cabeçalhos exatamente como acima (rode
 `inicializarPlanilha()` para garantir isso automaticamente).
 
-> Como não há mais coluna `Regional`/`Lotação`, a identificação do servidor não
-> depende mais de desambiguar nomes parecidos: o CPF completo, que é único por
-> pessoa, já identifica a linha certa (ver seção 3). Se algum dia vocês
-> quiserem voltar a oferecer busca por nome com lista de sugestões, essa
-> coluna faria falta de novo para diferenciar homônimos.
+> `Classe` e `Requereu_40h` continuam na planilha (podem ser úteis para
+> filtros e relatórios internos da SEGEP), mas não são exibidas nem
+> perguntadas na página — o servidor só confere Nome, Ordem, Data/hora do
+> requerimento e o status. Como não há mais coluna `Regional`/`Lotação`, a
+> identificação também não depende de desambiguar nomes parecidos: o CPF
+> completo, que é único por pessoa, já identifica a linha certa (ver seção 3).
 
 ### Aba `Log_Alterações` (gerada pelo sistema)
 
@@ -88,10 +89,10 @@ A primeira linha deve conter os cabeçalhos exatamente como acima (rode
 
 1. Crie uma Planilha Google nova (ou use uma existente).
 2. Crie a aba `Cadastro` com os cabeçalhos da seção 1 e importe/cole os dados de
-   `MATR.`, `NOME`, `CLASSE` e `DATA` da sua lista de origem (a coluna `Ordem`
-   pode ser descartada). Deixe `CPF` vazio se ainda não tiver sido cruzado —
-   ele pode ser preenchido depois, linha por linha, conforme o cruzamento com
-   a base da SEGEP avançar.
+   `Ordem`, `MATR.`, `NOME`, `CLASSE` e `DATA` da sua lista de origem, cada um
+   na coluna correspondente. Deixe `CPF` vazio se ainda não tiver sido
+   cruzado — ele pode ser preenchido depois, linha por linha, conforme o
+   cruzamento com a base da SEGEP avançar.
 3. Extensões → Apps Script para abrir o editor vinculado a essa planilha.
 
 ### 2.2 Colar o código
@@ -172,21 +173,24 @@ muda).
    (ignorando pontuação) com o valor digitado nesta etapa. Sempre retorna a
    mesma mensagem genérica em caso de erro. Após 5 tentativas erradas naquele
    registro, bloqueia novas tentativas por 15 minutos (contador e bloqueio
-   persistidos nas colunas I/J da aba `Cadastro`, então sobrevivem a
+   persistidos nas colunas J/K da aba `Cadastro`, então sobrevivem a
    reinícios do script). Em caso de sucesso, gera um **token de sessão
    opaco** (UUID), válido por 15 minutos via `CacheService`, e nunca mais
    reenvia a senha nas chamadas seguintes.
 3. **Exibição dos dados**: o CPF nunca é enviado ao cliente em texto — o
    servidor só vê o placeholder fixo `XXX.XXX.XXX-**`, mesmo sendo o dono do
-   registro. Isso é deliberado (ver seção "LGPD" abaixo).
+   registro. Isso é deliberado (ver seção "LGPD" abaixo). A tela mostra
+   Matrícula, Nome, CPF mascarado, Ordem, Data/hora do requerimento e status
+   — `Classe` e `Requereu_40h` não são exibidas (ficam só na planilha).
+   `Ordem` e `Data/hora do requerimento` aparecem desabilitadas: são dados do
+   protocolo original, não passam por autoatendimento.
 4. **Confirmar / Corrigir** (`registrarConfirmacao`):
    - `Confirmar dados corretos`: grava `Status_Confirmação = Confirmado` e
      `Data_Confirmação = agora`, e uma linha resumo em `Log_Alterações`.
-   - `Enviar correção`: para cada campo alterado (`Nome`, `Classe`,
-     `Requereu_40h`, `Data_Requerimento`), grava uma linha em
-     `Log_Alterações` com valor anterior/novo — **sem** sobrescrever a aba
-     `Cadastro`. Define `Status_Confirmação = "Corrigido — aguardando
-     validação da SEGEP"`.
+   - `Enviar correção`: hoje o único campo editável é `Nome`. Se ele for
+     alterado, grava uma linha em `Log_Alterações` com valor anterior/novo —
+     **sem** sobrescrever a aba `Cadastro`. Define `Status_Confirmação =
+     "Corrigido — aguardando validação da SEGEP"`.
    - Em ambos os casos, se o servidor preencheu texto de requerimento e/ou
      anexo, uma linha é criada em `Requerimentos` (`Status_Análise =
      Pendente`) e o arquivo é salvo na pasta do Drive configurada.
@@ -262,6 +266,8 @@ integridade) — avise se quiser que essa coluna extra seja adicionada ao log.
 - O token de sessão usa `CacheService` (memória temporária do Google, até 15
   min). Isso é intencional: nada de identidade fica "lembrado" além do tempo
   necessário para o servidor concluir o formulário.
-- Campos `Matrícula` e `CPF` não são editáveis pelo próprio servidor nesta
-  tela (matrícula é a chave do registro; CPF deve ser corrigido diretamente
-  com a SEGEP, por ser a própria credencial de acesso).
+- Campos `Matrícula`, `CPF`, `Ordem` e `Data_Requerimento` não são editáveis
+  pelo próprio servidor nesta tela (matrícula é a chave do registro; CPF é a
+  própria credencial de acesso; Ordem e Data/hora do requerimento são dados
+  de protocolo — qualquer correção neles deve ser tratada diretamente com a
+  SEGEP). Hoje só `Nome` pode ser corrigido pelo servidor.

@@ -21,14 +21,15 @@ var COL_MATRICULA = 1;
 var COL_NOME = 2;
 var COL_CPF = 3;
 var COL_CLASSE = 4;
-var COL_REQUEREU_40H = 5;
+var COL_ORDEM = 5;
 var COL_DATA_REQUERIMENTO = 6;
-var COL_STATUS_CONFIRMACAO = 7;
-var COL_DATA_CONFIRMACAO = 8;
+var COL_REQUEREU_40H = 7;
+var COL_STATUS_CONFIRMACAO = 8;
+var COL_DATA_CONFIRMACAO = 9;
 // Colunas de controle do sistema (não fazem parte da lista original, usadas para
 // limitar tentativas de senha — ver README.md, seção "Colunas de controle").
-var COL_TENTATIVAS_FALHAS = 9;
-var COL_BLOQUEADO_ATE = 10;
+var COL_TENTATIVAS_FALHAS = 10;
+var COL_BLOQUEADO_ATE = 11;
 
 var MAX_TENTATIVAS = 5;
 var BLOQUEIO_MINUTOS = 15;
@@ -51,11 +52,11 @@ var MIME_PERMITIDOS = {
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx'
 };
 
+// Ordem, Data_Requerimento, Classe e Requereu_40h são dados do protocolo
+// original e não passam por autoatendimento: não aparecem no formulário
+// como campos editáveis. Só o Nome pode ser corrigido pelo próprio servidor.
 var CAMPOS_EDITAVEIS = {
-  nome: { rotulo: 'Nome' },
-  classe: { rotulo: 'Classe' },
-  requereu40h: { rotulo: 'Requereu_40h' },
-  dataRequerimento: { rotulo: 'Data_Requerimento' }
+  nome: { rotulo: 'Nome' }
 };
 
 // ===================== WEB APP ENTRY POINTS =====================
@@ -94,8 +95,8 @@ function inicializarPlanilha() {
     throw new Error('Aba "Cadastro" não encontrada. Crie-a e importe os dados antes de rodar esta função.');
   }
   var cabecalhoCadastro = [
-    'Matrícula', 'Nome', 'CPF', 'Classe', 'Requereu_40h',
-    'Data_Requerimento', 'Status_Confirmação', 'Data_Confirmação',
+    'Matrícula', 'Nome', 'CPF', 'Classe', 'Ordem', 'Data_Requerimento',
+    'Requereu_40h', 'Status_Confirmação', 'Data_Confirmação',
     'Tentativas_Falhas', 'Bloqueado_Até'
   ];
   cadastro.getRange(1, 1, 1, cabecalhoCadastro.length).setValues([cabecalhoCadastro]);
@@ -210,8 +211,7 @@ function validarSenha(id, senha) {
   var matricula = valores[COL_MATRICULA - 1];
   var nome = valores[COL_NOME - 1];
   var cpf = valores[COL_CPF - 1];
-  var classe = valores[COL_CLASSE - 1];
-  var requereu40h = valores[COL_REQUEREU_40H - 1];
+  var ordem = valores[COL_ORDEM - 1];
   var dataRequerimento = valores[COL_DATA_REQUERIMENTO - 1];
   var status = valores[COL_STATUS_CONFIRMACAO - 1];
   var dataConfirmacao = valores[COL_DATA_CONFIRMACAO - 1];
@@ -260,9 +260,8 @@ function validarSenha(id, senha) {
       matricula: matricula,
       nome: nome,
       cpfMascarado: 'XXX.XXX.XXX-**',
-      classe: classe,
-      requereu40h: requereu40h,
-      dataRequerimento: formatarData_(dataRequerimento),
+      ordem: ordem,
+      dataRequerimento: formatarData_(dataRequerimento, true),
       status: status || 'Pendente',
       dataConfirmacao: dataConfirmacao ? formatarData_(dataConfirmacao) : ''
     }
@@ -274,7 +273,7 @@ function validarSenha(id, senha) {
 /**
  * payload = {
  *   acao: 'confirmar' | 'corrigir',
- *   camposEditados: { nome, classe, requereu40h, dataRequerimento },
+ *   camposEditados: { nome },
  *   requerimentoTexto: string,
  *   anexo: { base64, mimeType, filename } | null
  * }
@@ -293,10 +292,7 @@ function registrarConfirmacao(token, payload) {
   var nomeAtual = valores[COL_NOME - 1];
 
   var atual = {
-    nome: valores[COL_NOME - 1],
-    classe: valores[COL_CLASSE - 1],
-    requereu40h: valores[COL_REQUEREU_40H - 1],
-    dataRequerimento: valores[COL_DATA_REQUERIMENTO - 1]
+    nome: valores[COL_NOME - 1]
   };
 
   var agora = new Date();

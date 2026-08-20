@@ -42,8 +42,7 @@
     els.fMatricula = document.getElementById('f-matricula');
     els.fNome = document.getElementById('f-nome');
     els.fCpf = document.getElementById('f-cpf');
-    els.fClasse = document.getElementById('f-classe');
-    els.fRequereu40h = document.getElementById('f-requereu40h');
+    els.fOrdem = document.getElementById('f-ordem');
     els.fDataRequerimento = document.getElementById('f-data-requerimento');
     els.fStatus = document.getElementById('f-status');
     els.fRequerimentoTexto = document.getElementById('f-requerimento-texto');
@@ -182,8 +181,7 @@
     els.fMatricula.value = dados.matricula || '';
     els.fNome.value = dados.nome || '';
     els.fCpf.value = dados.cpfMascarado || '';
-    els.fClasse.value = dados.classe || '';
-    els.fRequereu40h.value = (dados.requereu40h === 'Não' || dados.requereu40h === 'Nao') ? 'Não' : 'Sim';
+    els.fOrdem.value = dados.ordem || '';
     els.fDataRequerimento.value = dados.dataRequerimento || '';
     els.fStatus.value = dados.status || '';
     els.fRequerimentoTexto.value = '';
@@ -230,10 +228,7 @@
       var payload = {
         acao: acao,
         camposEditados: {
-          nome: els.fNome.value,
-          classe: els.fClasse.value,
-          requereu40h: els.fRequereu40h.value,
-          dataRequerimento: els.fDataRequerimento.value
+          nome: els.fNome.value
         },
         requerimentoTexto: els.fRequerimentoTexto.value,
         anexo: anexoPayload || null
