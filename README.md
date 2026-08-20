@@ -1,198 +1,163 @@
 # Sistema de Confirmação de Dados Cadastrais — Majoração de Jornada 40h
 
-Aplicação web (Google Apps Script + Google Sheets) para que servidores confirmem os
-próprios dados de requerimento de majoração de jornada semanal de 30h para 40h, e
-registrem um requerimento em texto com anexo, se precisarem relatar algo.
+Aplicação web (Next.js, hospedada no Vercel) para que servidores confirmem os
+próprios dados de requerimento de majoração de jornada semanal de 30h para
+40h, e registrem um requerimento em texto com anexo, se precisarem relatar
+algo.
+
+> Este projeto já foi implementado como Google Apps Script + Google Sheets
+> numa versão anterior. Esta é a versão que roda no Vercel: banco de dados
+> Postgres (via integração Neon) no lugar da Planilha Google, e Vercel Blob
+> no lugar do Google Drive para os anexos.
+
+## Arquitetura
+
+| Peça | Tecnologia |
+|---|---|
+| Framework | Next.js (App Router), hospedado no Vercel |
+| Banco de dados | Postgres — integração Neon, conectada pela aba **Storage** do projeto no Vercel |
+| Anexos | Vercel Blob, conectado pela mesma aba **Storage** |
+| Sessão pós-senha | Token assinado (JWT), sem estado guardado no servidor |
+
+Como o repositório já está conectado ao Vercel, **qualquer push nesta branch
+gera um novo deploy automaticamente** — não há um passo manual de "publicar".
+O que falta configurar é só o banco e os anexos (seção 2).
 
 ## Arquivos deste projeto
 
-| Arquivo | Função |
+| Caminho | Função |
 |---|---|
-| `Code.gs` | Backend (leitura/escrita na planilha, busca, autenticação, upload de anexos) |
-| `Index.html` | Estrutura da página (as 4 etapas do fluxo) |
-| `CSS.html` | Estilos (mobile-first) |
-| `JS.html` | Lógica de cliente (chamadas `google.script.run`, validações) |
-| `appsscript.json` | Manifesto do projeto Apps Script |
-
-Todos esses arquivos vão para dentro do **mesmo** projeto Apps Script (vinculado à
-planilha — "container-bound script").
+| `app/page.js` | Página única com as 4 etapas do fluxo (componente cliente React) |
+| `app/layout.js`, `app/globals.css` | Layout raiz e estilos (mobile-first) |
+| `app/api/buscar-cpf/route.js` | Etapa 1 — localizar servidor pelo CPF |
+| `app/api/validar-senha/route.js` | Etapa 2 — validar senha e emitir token de sessão |
+| `app/api/confirmar/route.js` | Etapas 3-4 — confirmar dados, gravar requerimento/anexo |
+| `lib/db.js` | Acesso ao Postgres (Neon) |
+| `lib/session.js` | Emissão/verificação do token de sessão (JWT) |
+| `lib/format.js`, `lib/anexo.js` | Utilitários |
+| `scripts/schema.sql` | Estrutura das tabelas — rode uma vez no banco |
+| `scripts/seed.mjs` | Importa a lista de servidores (CSV) para o banco |
 
 ---
 
-## 1. Estrutura da Planilha Google
+## 1. Estrutura dos dados (Postgres)
 
-Crie (ou use) uma Planilha Google com as abas abaixo. Só a aba **Cadastro** precisa
-ser pré-carregada manualmente por você; as abas **Log_Alterações** e
-**Requerimentos** são criadas/preenchidas automaticamente pelo sistema (você pode
-rodar `inicializarPlanilha()` uma vez para criar os cabeçalhos, ver seção 3).
+Sua lista de origem vem como `Ordem | CPF | MATR. | NOME | CLASSE | DATA`.
+Isso vira a tabela `servidores` (ver `scripts/schema.sql` para o SQL exato):
 
-### Aba `Cadastro` (pré-carregada por você)
-
-Sua lista de origem vem como `Ordem | CPF | MATR. | NOME | CLASSE | DATA`. O
-mapeamento para a aba `Cadastro` é:
-
-| Coluna | Nome | Vem de | Observações |
-|---|---|---|---|
-| A | `Matrícula` | `MATR.` | Identificador único do servidor |
-| B | `Nome` | `NOME` | Nome completo |
-| C | `CPF` | `CPF` | Pode nascer vazio e ser preenchido depois, conforme o cruzamento com a base da SEGEP for avançando — só passa a valer como senha de acesso quando estiver preenchido naquela linha. Aceita com ou sem pontuação (o sistema normaliza) |
-| D | `Classe` | `CLASSE` | Ex: GM I, GM II, Inspetor, Subinspetor, Subinspetora, Inspetora. **Não aparece na página** — fica só na planilha, para uso interno da SEGEP |
-| E | `Ordem` | `Ordem` | Número de ordem do protocolo original. Exibido na página, mas **somente leitura** |
-| F | `Data_Requerimento` | `DATA` | Data (e hora, se houver) do requerimento original de majoração. Exibido na página, mas **somente leitura** |
-| G | `Requereu_40h` | *(não existe na lista de origem)* | A lista inteira é composta por quem já requereu a majoração, então esta coluna deve ser `Sim` em todas as linhas — rode `preencherRequereu40hSeVazio()` uma vez para preencher automaticamente onde estiver em branco. **Não aparece na página** |
-| H | `Status_Confirmação` | *(gerado pelo sistema)* | Preenchido pelo sistema: vazio/`Pendente` ou `Confirmado` |
-| I | `Data_Confirmação` | *(gerado pelo sistema)* | Preenchida pelo sistema no momento em que o servidor confirma |
-
-**Colunas de controle do sistema (não fazem parte da lista original — são criadas e
-usadas apenas para limitar tentativas de senha; não edite manualmente):**
-
-| Coluna | Nome | Observações |
+| Coluna | Vem de | Observações |
 |---|---|---|
-| J | `Tentativas_Falhas` | Contador de tentativas de senha incorretas para aquele registro |
-| K | `Bloqueado_Até` | Timestamp até quando o acesso àquele registro fica bloqueado, após 5 tentativas erradas |
+| `matricula` | `MATR.` | Identificador único (chave do upsert na importação) |
+| `nome` | `NOME` | Nome completo |
+| `cpf` | `CPF` | Só dígitos (11 caracteres) ou `NULL` até o cruzamento com a base da SEGEP — só passa a valer como senha de acesso quando estiver preenchido |
+| `classe` | `CLASSE` | Ex: GM I, GM II, Inspetor, Subinspetor, Subinspetora, Inspetora. **Não aparece na página** — fica só no banco, para uso interno da SEGEP |
+| `ordem` | `Ordem` | Número de ordem do protocolo original. Exibido na página, mas **somente leitura** |
+| `data_requerimento` | `DATA` | Data/hora do requerimento original de majoração. Exibido na página, mas **somente leitura** |
+| `status` | *(gerado pelo sistema)* | `Pendente` ou `Confirmado` |
+| `data_confirmacao` | *(gerado pelo sistema)* | Preenchida no momento em que o servidor confirma |
+| `tentativas_falhas`, `bloqueado_ate` | *(controle do sistema)* | Usadas só para limitar tentativas de senha — não edite manualmente |
 
-A primeira linha deve conter os cabeçalhos exatamente como acima (rode
-`inicializarPlanilha()` para garantir isso automaticamente).
+Duas tabelas adicionais registram a atividade (equivalentes às antigas abas
+`Log_Alterações` e `Requerimentos`):
 
-> `Classe` e `Requereu_40h` continuam na planilha (podem ser úteis para
-> filtros e relatórios internos da SEGEP), mas não são exibidas nem
-> perguntadas na página. Todos os dados exibidos — Matrícula, Nome, CPF
-> mascarado, Ordem, Data/hora do requerimento e status — são **somente
-> leitura**: o servidor confere, mas não edita nada por aqui (ver seção 3).
-> Como não há mais coluna `Regional`/`Lotação`, a identificação também não
-> depende de desambiguar nomes parecidos: o CPF completo, que é único por
-> pessoa, já identifica a linha certa.
-
-### Aba `Log_Alterações` (gerada pelo sistema)
-
-| Timestamp | Matrícula | Campo_Alterado | Valor_Anterior | Valor_Novo | Tipo |
-|---|---|---|---|---|---|
-
-- Uma linha resumo (`Tipo = Confirmação`) é criada a cada vez que o servidor
-  confirma os dados.
-- Como nenhum campo é editável pelo autoatendimento, não há mais linhas de
-  correção geradas automaticamente nesta aba — se o servidor perceber algo
-  errado, ele relata no campo "Requerimento" (aba `Requerimentos`), e a
-  correção em si é feita manualmente pela SEGEP direto na aba `Cadastro`.
-
-### Aba `Requerimentos` (gerada pelo sistema, só ganha linha se o servidor preencher algo)
-
-| Timestamp | Matrícula | Nome | Texto_Requerimento | Link_Anexo | Status_Análise |
-|---|---|---|---|---|---|
-
-- `Status_Análise` começa sempre como `Pendente`. Cabe à SEGEP atualizar
+- **`log_confirmacoes`** — uma linha a cada vez que um servidor confirma os
+  dados (auditoria).
+- **`requerimentos`** — uma linha só quando o servidor preenche texto e/ou
+  anexo. `status_analise` começa sempre `Pendente`; cabe à SEGEP atualizar
   manualmente conforme o requerimento for analisado.
 
+Nenhum campo da tela é editável pelo autoatendimento (nem `Nome`). Se algo
+estiver errado, o relato vai pelo campo Requerimento, e a correção em si é
+feita manualmente pela SEGEP direto no banco (ver seção 3).
+
 ---
 
-## 2. Passo a passo de implantação
+## 2. Passo a passo de configuração
 
-### 2.1 Preparar a planilha
+### 2.1 Conectar o banco (Postgres via Neon)
 
-1. Crie uma Planilha Google nova (ou use uma existente).
-2. Crie a aba `Cadastro` com os cabeçalhos da seção 1 e importe/cole os dados de
-   `Ordem`, `MATR.`, `NOME`, `CLASSE` e `DATA` da sua lista de origem, cada um
-   na coluna correspondente. Deixe `CPF` vazio se ainda não tiver sido
-   cruzado — ele pode ser preenchido depois, linha por linha, conforme o
-   cruzamento com a base da SEGEP avançar.
-3. Extensões → Apps Script para abrir o editor vinculado a essa planilha.
+1. No [dashboard do Vercel](https://vercel.com/dashboard), abra o projeto
+   `majora-oguardas` → aba **Storage**.
+2. **Create Database → Postgres (Neon)** → siga o assistente e conecte ao
+   projeto. Isso injeta automaticamente a variável de ambiente
+   `DATABASE_URL` (ou `POSTGRES_URL`) nos deploys.
+3. Abra o **SQL Editor** da Neon (link disponível na própria aba Storage do
+   Vercel, ou direto no console da Neon) e rode o conteúdo de
+   `scripts/schema.sql` uma vez, para criar as tabelas.
 
-### 2.2 Colar o código
+### 2.2 Conectar o armazenamento de anexos (Vercel Blob)
 
-1. No editor Apps Script, apague o `Code.gs` padrão e cole o conteúdo do
-   `Code.gs` deste projeto.
-2. Crie os arquivos HTML: menu **+ → HTML**, nomeie exatamente `Index`, `CSS`,
-   `JS` (sem a extensão `.html` — o Apps Script adiciona sozinho) e cole o
-   conteúdo de `Index.html`, `CSS.html` e `JS.html` respectivamente.
-3. Abra o arquivo de manifesto (ícone de engrenagem → "Mostrar arquivo de
-   manifesto `appsscript.json`") e cole o conteúdo de `appsscript.json` deste
-   projeto (ou ajuste `access`/`executeAs` conforme a política da prefeitura).
+1. Ainda na aba **Storage** → **Create Database → Blob** → conecte ao
+   projeto. Isso injeta `BLOB_READ_WRITE_TOKEN` automaticamente.
 
-### 2.3 Criar a pasta de anexos no Google Drive
+### 2.3 Definir o segredo da sessão
 
-1. Crie uma pasta no Google Drive dedicada aos anexos dos requerimentos (ex:
-   "Anexos — Majoração 40h"). Restrinja o compartilhamento dessa pasta a quem
-   realmente precisa acessar (ex: apenas você e a equipe da SEGEP).
-2. Copie o ID da pasta (a parte da URL depois de `/folders/`).
-3. No editor Apps Script: ⚙️ **Configurações do projeto → Propriedades do
-   script → Adicionar propriedade do script**. Nome: `DRIVE_FOLDER_ID`. Valor:
-   o ID copiado.
+1. Aba **Settings → Environment Variables** do projeto.
+2. Adicione `SESSION_SECRET` com uma string aleatória longa (gere uma com
+   `openssl rand -base64 32`, por exemplo). Marque para os ambientes
+   Production e Preview.
+3. Faça um redeploy (ou aguarde o próximo push) para as variáveis passarem a
+   valer.
 
-### 2.4 Inicializar a planilha
+### 2.4 Importar a lista de servidores
 
-1. No editor, selecione a função `inicializarPlanilha` no menu suspenso de
-   funções (ao lado do botão "Executar") e clique em **Executar**.
-2. Na primeira execução, o Google vai pedir autorização (escopos de
-   Planilhas, Drive e serviço de UI) — revise e autorize com a conta que será
-   a "dona" do script.
-3. Isso cria/normaliza os cabeçalhos das abas `Cadastro` (incluindo as duas
-   colunas de controle J/K), `Log_Alterações` e `Requerimentos`.
-4. Rode também `preencherRequereu40hSeVazio` uma vez (mesmo processo: escolher
-   a função no menu suspenso e clicar em **Executar**) para marcar `Sim` em
-   toda linha cuja coluna `Requereu_40h` esteja em branco.
+Isso roda do seu computador (não é um passo dentro do Vercel):
 
-### 2.5 Publicar como Web App
+```bash
+npm install
+DATABASE_URL="postgres://...-a-mesma-connection-string-da-Neon" \
+  npm run seed -- caminho/para/lista.csv
+```
 
-1. **Implantar → Nova implantação**.
-2. Tipo: **App da Web**.
-3. Descrição: ex. "Confirmação 40h — v1".
-4. **Executar como**: "Eu" (a conta dona do script — assim o script tem
-   permissão de escrever na planilha e no Drive independentemente de quem
-   acessa o link).
-5. **Quem pode acessar**: "Qualquer pessoa" (ou "Qualquer pessoa com o link"),
-   já que os servidores não necessariamente têm conta Google corporativa e não
-   devem precisar fazer login para acessar — a autenticação é feita pela
-   própria aplicação (CPF + senha = últimos 4 dígitos do CPF).
-6. Clique em **Implantar** e autorize novamente se solicitado.
-7. Copie a **URL do app da Web** gerada — esse é o link único a compartilhar
-   com os servidores.
+O CSV precisa ter cabeçalho com as colunas `Ordem`, `CPF`, `MATR.`, `NOME`,
+`CLASSE`, `DATA` (nessa grafia ou parecida — o script tenta casar variações
+comuns). Rodar de novo com uma lista atualizada não duplica linhas: o
+`matricula` é a chave, e um CPF já preenchido antes nunca é apagado por uma
+linha nova sem CPF.
 
-### 2.6 Atualizações futuras
+A connection string da Neon fica em **Storage → (seu banco) → .env.local**
+no dashboard do Vercel, ou rodando `vercel env pull` na raiz do projeto.
 
-Sempre que alterar o código depois da primeira implantação, use **Implantar →
-Gerenciar implantações → editar (ícone de lápis) → Nova versão** para que a
-URL já compartilhada passe a refletir o código atualizado (a URL em si não
-muda).
+### 2.5 Deploy
+
+Não tem passo manual: o projeto já está conectado a este repositório
+GitHub, então cada push nesta branch (ou merge na branch de produção) gera
+um deploy novo automaticamente. Depois de configurar as três variáveis de
+ambiente acima e rodar a importação, a próxima visita a
+`https://majora-oguardas.vercel.app` já funciona com dados reais.
 
 ---
 
 ## 3. Fluxo funcional (como implementado)
 
-1. **Identificação por CPF** (`buscarPorCpf`): o servidor digita o CPF
-   completo (11 dígitos, com ou sem pontuação). O sistema localiza a linha
-   correspondente na aba `Cadastro` e revela **apenas o nome** — nenhum outro
-   dado (matrícula, classe, status etc.) é retornado nesta etapa. O
-   identificador devolvido ao cliente (`id`) é só o número da linha na
-   planilha; sozinho, ele não expõe nenhuma informação pessoal. Como o CPF é
-   único por pessoa, essa etapa substitui a antiga busca por nome com lista de
-   sugestões — não há mais ambiguidade de homônimos a resolver.
-   Como mitigação simples contra tentativas automatizadas de descobrir nomes
-   testando CPFs em sequência, há também um limite global (todas as sessões
-   somadas) de consultas por minuto (`consultaDentroDoLimiteGlobal_`). Isso
-   **não substitui** um rate-limit por IP — o Apps Script não expõe o IP do
-   cliente (ver seção "LGPD" abaixo) — é só uma segunda camada de fricção.
-2. **Senha** (`validarSenha`): compara os últimos 4 dígitos do CPF armazenado
-   (ignorando pontuação) com o valor digitado nesta etapa. Sempre retorna a
-   mesma mensagem genérica em caso de erro. Após 5 tentativas erradas naquele
-   registro, bloqueia novas tentativas por 15 minutos (contador e bloqueio
-   persistidos nas colunas J/K da aba `Cadastro`, então sobrevivem a
-   reinícios do script). Em caso de sucesso, gera um **token de sessão
-   opaco** (UUID), válido por 15 minutos via `CacheService`, e nunca mais
-   reenvia a senha nas chamadas seguintes.
+1. **Identificação por CPF** (`POST /api/buscar-cpf`): o servidor digita o
+   CPF completo (11 dígitos, com ou sem pontuação). O sistema localiza o
+   registro e revela **apenas o nome** — nenhum outro dado (matrícula,
+   classe, status etc.) é retornado nesta etapa. Como o CPF é único por
+   pessoa, essa etapa identifica a linha certa sem precisar de busca por
+   nome nem de campo de desambiguação.
+   Como mitigação simples contra tentativas automatizadas de descobrir
+   nomes testando CPFs em sequência, há um limite global (todas as sessões
+   somadas) de consultas por minuto, contado direto no Postgres
+   (`consultaDentroDoLimiteGlobal`).
+2. **Senha** (`POST /api/validar-senha`): compara os últimos 4 dígitos do
+   CPF armazenado com o valor digitado. Sempre retorna a mesma mensagem
+   genérica em caso de erro. Após 5 tentativas erradas naquele registro,
+   bloqueia novas tentativas por 15 minutos (contador e bloqueio
+   persistidos na própria tabela `servidores`). Em caso de sucesso, emite um
+   **token de sessão assinado** (JWT, 15 minutos de validade) — o backend
+   não guarda nenhum estado de sessão; o próprio token, assinado com
+   `SESSION_SECRET`, carrega o id do servidor e expira sozinho.
 3. **Exibição dos dados**: o CPF nunca é enviado ao cliente em texto — o
    servidor só vê o placeholder fixo `XXX.XXX.XXX-**`, mesmo sendo o dono do
-   registro. Isso é deliberado (ver seção "LGPD" abaixo). A tela mostra
-   Matrícula, Nome, CPF mascarado, Ordem, Data/hora do requerimento e status
-   — `Classe` e `Requereu_40h` não são exibidas (ficam só na planilha). Todos
-   os campos aparecem desabilitados: nada nessa tela é editável pelo
-   autoatendimento.
-4. **Confirmar** (`registrarConfirmacao`): grava `Status_Confirmação =
-   Confirmado` e `Data_Confirmação = agora`, e uma linha resumo em
-   `Log_Alterações`. Se o servidor preencheu texto de requerimento e/ou
-   anexo, uma linha também é criada em `Requerimentos` (`Status_Análise =
-   Pendente`) e o arquivo é salvo na pasta do Drive configurada — esse
-   requerimento é o canal para relatar qualquer dado incorreto; a correção em
-   si é feita manualmente pela SEGEP na aba `Cadastro`, depois de ler o
+   registro (ver seção "LGPD" abaixo). Todos os campos aparecem desabilitados:
+   nada nessa tela é editável pelo autoatendimento.
+4. **Confirmar** (`POST /api/confirmar`): grava `status = 'Confirmado'` e
+   `data_confirmacao = agora`, e uma linha em `log_confirmacoes`. Se o
+   servidor preencheu texto de requerimento e/ou anexo, uma linha também é
+   criada em `requerimentos` e o arquivo é enviado para o Vercel Blob — esse
+   requerimento é o canal para relatar qualquer dado incorreto; a correção
+   em si é feita manualmente pela SEGEP no banco, depois de ler o
    requerimento.
 5. **Tela final**: confirma o registro com data/hora e menciona se o
    requerimento foi recebido.
@@ -204,70 +169,76 @@ muda).
 **Por que a identificação por CPF + senha de 4 dígitos é fraca — e por que
 isso é aceitável aqui, com os controles certos:**
 
-O CPF é dado pessoal (LGPD, art. 5º, I). Como o fluxo pedido usa o CPF
-completo como chave de busca (etapa 1) e os últimos 4 dígitos do próprio CPF
-como "senha" (etapa 2), é importante deixar claro, sem rodeios, o que isso
-significa na prática: **quem já sabe o CPF completo de alguém também sabe,
-por definição, os últimos 4 dígitos.** A etapa de senha não é um segundo
-fator independente — ela funciona como uma segunda digitação de confirmação
-("você tem certeza de que é você mesmo, e não digitou o CPF de outra pessoa
-por engano"), não como uma barreira adicional contra quem já tem o CPF em
-mãos. O controle de acesso real deste sistema é, na prática, **"só quem sabe
-o CPF de alguém consegue ver o nome e os dados dessa pessoa"** — um
-mecanismo de **baixa fricção para autoconfirmação de dados já sob custódia
-da administração**, não uma autenticação forte. O sistema foi desenhado
-assumindo isso, com controles compensatórios obrigatórios:
+O CPF é dado pessoal (LGPD, art. 5º, I). Como o fluxo usa o CPF completo
+como chave de busca (etapa 1) e os últimos 4 dígitos do próprio CPF como
+"senha" (etapa 2), vale deixar claro, sem rodeios, o que isso significa na
+prática: **quem já sabe o CPF completo de alguém também sabe, por
+definição, os últimos 4 dígitos.** A etapa de senha não é um segundo fator
+independente — funciona como uma segunda digitação de confirmação, não como
+barreira contra quem já tem o CPF em mãos. O controle de acesso real deste
+sistema é, na prática, "só quem sabe o CPF de alguém consegue ver o nome e
+os dados dessa pessoa" — baixa fricção para autoconfirmação de dados já sob
+custódia da administração, não autenticação forte. Controles compensatórios:
 
-- **A etapa de CPF revela só o nome, nada além disso.** Matrícula, classe,
-  status e demais dados só aparecem depois da senha confirmada.
-- **Limite global de consultas por minuto** (todas as sessões somadas) na
-  etapa de CPF, para dificultar — sem eliminar — tentativas automatizadas de
-  descobrir nomes testando CPFs em sequência (ver limitação sobre IP abaixo).
+- **A etapa de CPF revela só o nome, nada além disso.**
+- **Limite global de consultas por minuto** na etapa de CPF, para dificultar
+  — sem eliminar — tentativas automatizadas de descobrir nomes testando
+  CPFs em sequência.
 - **Mascaramento total do CPF na tela de dados** — nem o próprio servidor vê
-  o CPF completo (placeholder fixo `XXX.XXX.XXX-**`). Como ele já digitou o
-  CPF completo para entrar, não há necessidade de reexibi-lo; mostrar de novo
-  só aumentaria a superfície de exposição (ex.: print de tela,
-  compartilhamento de tela, uso em local público).
-- **Mensagem de erro genérica** na etapa de senha, para não ajudar tentativas
-  de enumeração de quem já passou da etapa de CPF.
+  o CPF completo.
+- **Mensagem de erro genérica** na etapa de senha.
 - **Limite de tentativas de senha** (5) com bloqueio temporário (15 min) por
-  registro, persistido na própria planilha.
+  registro.
 - **Nenhum campo é editável pelo autoatendimento** — toda a tela de dados é
-  somente leitura. Se algo estiver errado, o relato vai pelo Requerimento e a
-  correção em si é feita manualmente pela SEGEP na aba `Cadastro`, nunca
-  automaticamente a partir do que o servidor digitou.
-- **Token de sessão de curta duração** — depois da senha validada, as ações
-  seguintes (confirmar dados / enviar requerimento) usam um token opaco de
-  15 minutos, não a senha ou a matrícula.
-- **Anexos** ficam em uma pasta do Drive controlada por você (não pública por
-  padrão), e o link salvo na planilha `Requerimentos` só é visível a quem tem
-  acesso à planilha.
-- **HTTPS**: nativo do Google Apps Script Web App — todo tráfego, incluindo a
-  senha digitada, é criptografado em trânsito.
+  somente leitura. Correções vão pelo Requerimento e são feitas manualmente
+  pela SEGEP no banco, nunca automaticamente a partir do que o servidor
+  digitou.
+- **Token de sessão de curta duração** (15 min), assinado e sem estado no
+  servidor — depois de expirar, é preciso repetir CPF + senha.
+- **Anexos**: enviados como blobs públicos (URL de acesso é um caminho
+  aleatório e imprevisível — mesmo modelo de exposição de um link do Google
+  Drive só com "quem tem o link"). Se precisar de controle de acesso mais
+  forte (blob privado com URL assinada por requisição), é possível trocar
+  `access: 'public'` por `access: 'private'` em
+  `app/api/confirmar/route.js`, mas isso exige montar também uma tela
+  autenticada para a SEGEP baixar os anexos — fora do escopo desta entrega.
+- **HTTPS**: nativo do Vercel.
 
-**Sobre IP/user-agent (auditoria):** o Google Apps Script (HtmlService) **não
-expõe o endereço IP do cliente** ao código do servidor — não há API para isso.
-Por essa limitação técnica, este projeto não implementa registro de IP. Caso a
-SEGEP precise de auditoria por IP, isso exigiria uma camada adicional fora do
-Apps Script (ex.: proxy reverso ou serviço externo), o que está fora do
-escopo desta entrega. Se desejar, é possível registrar o `user-agent` do
-navegador (enviado pelo próprio cliente, portanto não é garantia de
-integridade) — avise se quiser que essa coluna extra seja adicionada ao log.
+**Sobre IP (auditoria):** diferente da versão anterior (Google Apps Script,
+que não expõe IP nenhum), rodando no Vercel o backend **tem acesso ao IP do
+cliente** via cabeçalho `x-forwarded-for`. Isso não está sendo registrado
+hoje (só é usado, de forma agregada, no limite de consultas por CPF/minuto);
+se a SEGEP quiser auditoria por IP por confirmação, é uma mudança pequena em
+`app/api/confirmar/route.js` e `log_confirmacoes` — avise se quiser que eu
+adicione.
 
 ---
 
-## 5. Limitações conhecidas / decisões de design
+## 5. Rodando localmente
 
-- O identificador retornado pela busca (`id`) é o número da linha na
-  planilha. Isso funciona bem para uma lista relativamente estática; se
-  linhas forem reordenadas/excluídas manualmente na aba `Cadastro` **enquanto
-  um servidor está no meio do fluxo**, a sessão dele pode ficar inválida (o
-  pior caso é um erro de sessão expirada, nunca exposição de dado de
-  outra pessoa).
-- O token de sessão usa `CacheService` (memória temporária do Google, até 15
-  min). Isso é intencional: nada de identidade fica "lembrado" além do tempo
-  necessário para o servidor concluir o formulário.
+```bash
+npm install
+cp .env.example .env.local   # preencha DATABASE_URL, BLOB_READ_WRITE_TOKEN, SESSION_SECRET
+npm run dev                   # http://localhost:3000
+```
+
+Use a mesma `DATABASE_URL` do banco de desenvolvimento/produção da Neon
+(ou crie um banco Neon separado só para testes locais).
+
+---
+
+## 6. Limitações conhecidas / decisões de design
+
+- O limite de consultas por CPF/minuto é global (soma de todos os usuários),
+  não por IP — uma pessoa mal-intencionada com muitas requisições em
+  paralelo ainda consome a cota de todo mundo antes de ser bloqueada. Um
+  limite por IP é possível (já temos acesso ao IP, diferente da versão
+  Apps Script) mas não foi implementado nesta entrega.
 - Nenhum campo é editável pelo próprio servidor nesta tela — toda a tela de
   dados (Matrícula, Nome, CPF, Ordem, Data/hora do requerimento) é somente
   leitura. Qualquer correção deve ser tratada diretamente com a SEGEP,
   normalmente a partir do que o servidor descrever no campo Requerimento.
+- Não existe hoje uma tela autenticada para a SEGEP consultar
+  `requerimentos`/`servidores` — o acesso é direto pelo SQL Editor da Neon
+  (dashboard do Vercel) e pelo painel do Vercel Blob, equivalente a como a
+  versão anterior usava a própria Planilha Google e a pasta do Drive.

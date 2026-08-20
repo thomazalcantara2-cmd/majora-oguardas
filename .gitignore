@@ -1,0 +1,17 @@
+# Next.js
+/.next/
+/out/
+
+# Dependencies
+/node_modules
+
+# Env vars (never commit secrets)
+.env
+.env*.local
+
+# Vercel
+.vercel
+
+# Misc
+.DS_Store
+*.log
