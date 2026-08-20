@@ -23,9 +23,10 @@
   });
 
   function cacheEls() {
-    els.searchInput = document.getElementById('search-input');
-    els.searchResults = document.getElementById('search-results');
+    els.cpfInput = document.getElementById('cpf-input');
+    els.btnBuscarCpf = document.getElementById('btn-buscar-cpf');
     els.searchHint = document.getElementById('search-hint');
+    els.searchError = document.getElementById('search-error');
 
     els.stepSearch = document.getElementById('step-search');
     els.stepPassword = document.getElementById('step-password');
@@ -42,7 +43,6 @@
     els.fNome = document.getElementById('f-nome');
     els.fCpf = document.getElementById('f-cpf');
     els.fClasse = document.getElementById('f-classe');
-    els.fRegional = document.getElementById('f-regional');
     els.fRequereu40h = document.getElementById('f-requereu40h');
     els.fDataRequerimento = document.getElementById('f-data-requerimento');
     els.fStatus = document.getElementById('f-status');
@@ -61,20 +61,13 @@
   }
 
   function bindEvents() {
-    var debounceTimer = null;
-    els.searchInput.addEventListener('input', function () {
-      var termo = els.searchInput.value;
-      clearTimeout(debounceTimer);
-      if (termo.trim().length < 2) {
-        els.searchResults.innerHTML = '';
-        els.searchHint.textContent = 'Digite ao menos 2 letras para buscar.';
-        els.searchHint.classList.remove('hidden');
-        return;
-      }
-      debounceTimer = setTimeout(function () {
-        buscar(termo);
-      }, 300);
+    els.cpfInput.addEventListener('input', function () {
+      hideError(els.searchError);
     });
+    els.cpfInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') buscarPorCpf();
+    });
+    els.btnBuscarCpf.addEventListener('click', buscarPorCpf);
 
     els.btnBackToSearch.addEventListener('click', function () {
       state.selectedId = null;
@@ -111,45 +104,35 @@
     });
   }
 
-  function buscar(termo) {
-    setLoading(false); // busca não usa overlay de tela cheia (mantém digitação fluida)
-    google.script.run
-      .withSuccessHandler(function (resultados) {
-        renderResultados(resultados);
-      })
-      .withFailureHandler(function (err) {
-        els.searchHint.textContent = 'Erro ao buscar. Tente novamente.';
-        els.searchHint.classList.remove('hidden');
-      })
-      .buscarServidores(termo);
-  }
+  // ---------- etapa 1: identificação por CPF ----------
 
-  function renderResultados(resultados) {
-    els.searchResults.innerHTML = '';
-    if (!resultados || resultados.length === 0) {
-      els.searchHint.textContent = 'Nenhum nome encontrado.';
-      els.searchHint.classList.remove('hidden');
+  function buscarPorCpf() {
+    var cpfDigitos = els.cpfInput.value.replace(/\D/g, '');
+    if (cpfDigitos.length !== 11) {
+      showError(els.searchError, 'Digite os 11 números do CPF.');
       return;
     }
-    els.searchHint.classList.add('hidden');
 
-    resultados.forEach(function (r) {
-      var li = document.createElement('li');
-      var nameSpan = document.createElement('span');
-      nameSpan.className = 'result-name';
-      nameSpan.textContent = r.nome;
-      li.appendChild(nameSpan);
-      if (r.info) {
-        var infoSpan = document.createElement('span');
-        infoSpan.className = 'result-info';
-        infoSpan.textContent = r.info;
-        li.appendChild(infoSpan);
-      }
-      li.addEventListener('click', function () {
-        selecionarServidor(r.id, r.nome);
-      });
-      els.searchResults.appendChild(li);
-    });
+    hideError(els.searchError);
+    els.btnBuscarCpf.disabled = true;
+    setLoading(true);
+
+    google.script.run
+      .withSuccessHandler(function (resp) {
+        setLoading(false);
+        els.btnBuscarCpf.disabled = false;
+        if (!resp.ok) {
+          showError(els.searchError, resp.message);
+          return;
+        }
+        selecionarServidor(resp.id, resp.nome);
+      })
+      .withFailureHandler(function (err) {
+        setLoading(false);
+        els.btnBuscarCpf.disabled = false;
+        showError(els.searchError, 'Erro ao consultar. Tente novamente.');
+      })
+      .buscarPorCpf(cpfDigitos);
   }
 
   function selecionarServidor(id, nome) {
@@ -160,6 +143,8 @@
     showStep('password');
     setTimeout(function () { els.passwordInput.focus(); }, 50);
   }
+
+  // ---------- etapa 2: senha ----------
 
   function validarSenha() {
     var senha = els.passwordInput.value.trim();
@@ -198,7 +183,6 @@
     els.fNome.value = dados.nome || '';
     els.fCpf.value = dados.cpfMascarado || '';
     els.fClasse.value = dados.classe || '';
-    els.fRegional.value = dados.regional || '';
     els.fRequereu40h.value = (dados.requereu40h === 'Não' || dados.requereu40h === 'Nao') ? 'Não' : 'Sim';
     els.fDataRequerimento.value = dados.dataRequerimento || '';
     els.fStatus.value = dados.status || '';
@@ -228,7 +212,7 @@
     hideError(els.submitError);
 
     if (!state.token) {
-      showError(els.submitError, 'Sessão expirada. Refaça a busca e a validação de senha.');
+      showError(els.submitError, 'Sessão expirada. Refaça a identificação por CPF e a validação de senha.');
       return;
     }
 
@@ -248,7 +232,6 @@
         camposEditados: {
           nome: els.fNome.value,
           classe: els.fClasse.value,
-          regional: els.fRegional.value,
           requereu40h: els.fRequereu40h.value,
           dataRequerimento: els.fDataRequerimento.value
         },

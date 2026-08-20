@@ -3,6 +3,11 @@
  *
  * Backend Google Apps Script (Web App) vinculado a uma Planilha Google.
  * Consulte README.md para estrutura das abas e passo a passo de implantação.
+ *
+ * Fluxo de identificação: o servidor digita o próprio CPF completo, o sistema
+ * localiza o registro e revela o nome correspondente; em seguida o servidor
+ * digita a senha (últimos 4 dígitos do CPF) para confirmar identidade antes
+ * de ver qualquer outro dado.
  */
 
 // ===================== CONFIGURAÇÃO =====================
@@ -16,21 +21,28 @@ var COL_MATRICULA = 1;
 var COL_NOME = 2;
 var COL_CPF = 3;
 var COL_CLASSE = 4;
-var COL_REGIONAL = 5;
-var COL_REQUEREU_40H = 6;
-var COL_DATA_REQUERIMENTO = 7;
-var COL_STATUS_CONFIRMACAO = 8;
-var COL_DATA_CONFIRMACAO = 9;
+var COL_REQUEREU_40H = 5;
+var COL_DATA_REQUERIMENTO = 6;
+var COL_STATUS_CONFIRMACAO = 7;
+var COL_DATA_CONFIRMACAO = 8;
 // Colunas de controle do sistema (não fazem parte da lista original, usadas para
 // limitar tentativas de senha — ver README.md, seção "Colunas de controle").
-var COL_TENTATIVAS_FALHAS = 10;
-var COL_BLOQUEADO_ATE = 11;
+var COL_TENTATIVAS_FALHAS = 9;
+var COL_BLOQUEADO_ATE = 10;
 
 var MAX_TENTATIVAS = 5;
 var BLOQUEIO_MINUTOS = 15;
 var SESSAO_TTL_SEGUNDOS = 15 * 60; // duração do token de sessão pós-senha válida
 var MAX_ANEXO_BYTES = 10 * 1024 * 1024; // 10MB
-var MENSAGEM_ERRO_GENERICA = 'Não foi possível confirmar sua identidade. Verifique o nome selecionado e a senha e tente novamente.';
+var MENSAGEM_ERRO_SENHA = 'Não foi possível confirmar sua identidade. Verifique a senha e tente novamente.';
+var MENSAGEM_ERRO_CPF = 'Não encontramos esse CPF na base de servidores que requereram a majoração. Verifique os números digitados.';
+
+// Mitigação simples (não é um rate-limit robusto, ver README.md — Apps Script
+// não expõe IP do cliente) contra tentativas automatizadas de descobrir nomes
+// testando CPFs em sequência: limita o total de consultas por CPF, somando
+// todos os usuários, dentro de uma janela curta.
+var LIMITE_GLOBAL_JANELA_SEGUNDOS = 60;
+var LIMITE_GLOBAL_MAX_CONSULTAS = 40;
 
 var MIME_PERMITIDOS = {
   'application/pdf': '.pdf',
@@ -42,7 +54,6 @@ var MIME_PERMITIDOS = {
 var CAMPOS_EDITAVEIS = {
   nome: { rotulo: 'Nome' },
   classe: { rotulo: 'Classe' },
-  regional: { rotulo: 'Regional' },
   requereu40h: { rotulo: 'Requereu_40h' },
   dataRequerimento: { rotulo: 'Data_Requerimento' }
 };
@@ -83,7 +94,7 @@ function inicializarPlanilha() {
     throw new Error('Aba "Cadastro" não encontrada. Crie-a e importe os dados antes de rodar esta função.');
   }
   var cabecalhoCadastro = [
-    'Matrícula', 'Nome', 'CPF', 'Classe', 'Regional', 'Requereu_40h',
+    'Matrícula', 'Nome', 'CPF', 'Classe', 'Requereu_40h',
     'Data_Requerimento', 'Status_Confirmação', 'Data_Confirmação',
     'Tentativas_Falhas', 'Bloqueado_Até'
   ];
@@ -105,54 +116,94 @@ function inicializarPlanilha() {
   SpreadsheetApp.getUi().alert('Planilha inicializada com sucesso.');
 }
 
-// ===================== BUSCA (ETAPA 1) =====================
+/**
+ * A lista de origem (Ordem, CPF, MATR., NOME, CLASSE, DATA) não traz uma
+ * coluna "Requereu_40h" porque toda a lista, por definição, é composta por
+ * quem já requereu a majoração. Execute manualmente uma vez, depois de colar
+ * os dados na aba Cadastro, para preencher "Sim" em todas as linhas em que
+ * essa coluna estiver vazia.
+ */
+function preencherRequereu40hSeVazio() {
+  var sheet = getSheet_(SHEET_CADASTRO);
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+
+  var range = sheet.getRange(2, COL_REQUEREU_40H, lastRow - 1, 1);
+  var valores = range.getValues();
+  var alterou = false;
+  for (var i = 0; i < valores.length; i++) {
+    if (!valores[i][0]) {
+      valores[i][0] = 'Sim';
+      alterou = true;
+    }
+  }
+  if (alterou) range.setValues(valores);
+  SpreadsheetApp.getUi().alert('Coluna Requereu_40h preenchida com "Sim" onde estava vazia.');
+}
+
+// ===================== IDENTIFICAÇÃO POR CPF (ETAPA 1) =====================
 
 /**
- * Busca parcial por nome, sem diferenciar maiúsculas/acentos.
- * Retorna APENAS nome + dado de desambiguação (Classe/Regional) — nunca
- * matrícula, CPF ou qualquer outro dado sensível.
+ * Localiza o servidor pelo CPF completo e revela apenas o nome correspondente
+ * — nenhum outro dado (matrícula, classe, status etc.) é retornado nesta
+ * etapa. A senha (últimos 4 dígitos) ainda é exigida no passo seguinte antes
+ * de exibir o restante dos dados.
  */
-function buscarServidores(termo) {
-  var termoNorm = normalizarTexto(termo);
-  if (termoNorm.length < 2) return [];
+function buscarPorCpf(cpf) {
+  var cpfDigitos = String(cpf || '').replace(/\D/g, '');
+  if (cpfDigitos.length !== 11) {
+    return { ok: false, message: MENSAGEM_ERRO_CPF };
+  }
+
+  if (!consultaDentroDoLimiteGlobal_()) {
+    return { ok: false, message: 'Muitas consultas em um curto intervalo. Aguarde um momento e tente novamente.' };
+  }
 
   var sheet = getSheet_(SHEET_CADASTRO);
   var lastRow = sheet.getLastRow();
-  if (lastRow < 2) return [];
+  if (lastRow < 2) return { ok: false, message: MENSAGEM_ERRO_CPF };
 
-  var dados = sheet.getRange(2, 1, lastRow - 1, COL_REGIONAL).getValues();
-  var resultados = [];
+  var dados = sheet.getRange(2, 1, lastRow - 1, COL_CPF).getValues();
 
   for (var i = 0; i < dados.length; i++) {
-    var nome = dados[i][COL_NOME - 1];
-    if (!nome) continue;
-    if (normalizarTexto(nome).indexOf(termoNorm) === -1) continue;
+    var cpfCelula = String(dados[i][COL_CPF - 1] || '').replace(/\D/g, '');
+    if (!cpfCelula || cpfCelula !== cpfDigitos) continue;
 
-    resultados.push({
-      id: i + 2, // número da linha na planilha (linha 1 = cabeçalho)
-      nome: nome,
-      info: [dados[i][COL_CLASSE - 1], dados[i][COL_REGIONAL - 1]].filter(String).join(' — ')
-    });
-    if (resultados.length >= 25) break;
+    var row = i + 2;
+    var bloqueadoAte = sheet.getRange(row, COL_BLOQUEADO_ATE).getValue();
+    if (bloqueadoAte && new Date(bloqueadoAte).getTime() > Date.now()) {
+      return { ok: false, message: 'Muitas tentativas incorretas. Tente novamente mais tarde.' };
+    }
+
+    return { ok: true, id: row, nome: dados[i][COL_NOME - 1] };
   }
 
-  return resultados;
+  return { ok: false, message: MENSAGEM_ERRO_CPF };
+}
+
+function consultaDentroDoLimiteGlobal_() {
+  var cache = CacheService.getScriptCache();
+  var chave = 'cpf_lookup_global';
+  var atual = Number(cache.get(chave)) || 0;
+  if (atual >= LIMITE_GLOBAL_MAX_CONSULTAS) return false;
+  cache.put(chave, String(atual + 1), LIMITE_GLOBAL_JANELA_SEGUNDOS);
+  return true;
 }
 
 // ===================== VALIDAÇÃO DE SENHA (ETAPA 2) =====================
 
 /**
- * Valida a senha (últimos 4 dígitos do CPF) contra o registro identificado por "id"
- * (o número de linha retornado por buscarServidores — nunca a matrícula).
- * Em caso de sucesso, retorna um token de sessão de curta duração e os dados
- * (não sensíveis / mascarados) do servidor. Em caso de falha, retorna sempre
- * a mesma mensagem genérica, sem indicar se o problema foi o nome ou a senha.
+ * Valida a senha (últimos 4 dígitos do CPF) contra o registro identificado por
+ * "id" (o número de linha retornado por buscarPorCpf). Em caso de sucesso,
+ * retorna um token de sessão de curta duração e os dados (não sensíveis /
+ * mascarados) do servidor. Em caso de falha, retorna sempre a mesma mensagem
+ * genérica.
  */
 function validarSenha(id, senha) {
   var row = parseInt(id, 10);
   var sheet = getSheet_(SHEET_CADASTRO);
   if (!row || row < 2 || row > sheet.getLastRow()) {
-    return { ok: false, message: MENSAGEM_ERRO_GENERICA };
+    return { ok: false, message: MENSAGEM_ERRO_SENHA };
   }
 
   var valores = sheet.getRange(row, 1, 1, COL_BLOQUEADO_ATE).getValues()[0];
@@ -160,7 +211,6 @@ function validarSenha(id, senha) {
   var nome = valores[COL_NOME - 1];
   var cpf = valores[COL_CPF - 1];
   var classe = valores[COL_CLASSE - 1];
-  var regional = valores[COL_REGIONAL - 1];
   var requereu40h = valores[COL_REQUEREU_40H - 1];
   var dataRequerimento = valores[COL_DATA_REQUERIMENTO - 1];
   var status = valores[COL_STATUS_CONFIRMACAO - 1];
@@ -174,7 +224,7 @@ function validarSenha(id, senha) {
   }
 
   if (!matricula) {
-    return { ok: false, message: MENSAGEM_ERRO_GENERICA };
+    return { ok: false, message: MENSAGEM_ERRO_SENHA };
   }
 
   var cpfDigitos = String(cpf).replace(/\D/g, '');
@@ -190,7 +240,7 @@ function validarSenha(id, senha) {
       return { ok: false, message: 'Muitas tentativas incorretas. Acesso bloqueado temporariamente.' };
     }
     sheet.getRange(row, COL_TENTATIVAS_FALHAS).setValue(tentativas);
-    return { ok: false, message: MENSAGEM_ERRO_GENERICA };
+    return { ok: false, message: MENSAGEM_ERRO_SENHA };
   }
 
   // Sucesso: zera contador de tentativas e bloqueio
@@ -211,7 +261,6 @@ function validarSenha(id, senha) {
       nome: nome,
       cpfMascarado: 'XXX.XXX.XXX-**',
       classe: classe,
-      regional: regional,
       requereu40h: requereu40h,
       dataRequerimento: formatarData_(dataRequerimento),
       status: status || 'Pendente',
@@ -225,7 +274,7 @@ function validarSenha(id, senha) {
 /**
  * payload = {
  *   acao: 'confirmar' | 'corrigir',
- *   camposEditados: { nome, classe, regional, requereu40h, dataRequerimento },
+ *   camposEditados: { nome, classe, requereu40h, dataRequerimento },
  *   requerimentoTexto: string,
  *   anexo: { base64, mimeType, filename } | null
  * }
@@ -233,7 +282,7 @@ function validarSenha(id, senha) {
 function registrarConfirmacao(token, payload) {
   var sessao = obterSessao_(token);
   if (!sessao) {
-    return { ok: false, message: 'Sessão expirada. Refaça a busca pelo nome e a validação de senha.' };
+    return { ok: false, message: 'Sessão expirada. Refaça a identificação por CPF e a validação de senha.' };
   }
 
   payload = payload || {};
@@ -246,7 +295,6 @@ function registrarConfirmacao(token, payload) {
   var atual = {
     nome: valores[COL_NOME - 1],
     classe: valores[COL_CLASSE - 1],
-    regional: valores[COL_REGIONAL - 1],
     requereu40h: valores[COL_REQUEREU_40H - 1],
     dataRequerimento: valores[COL_DATA_REQUERIMENTO - 1]
   };
@@ -362,14 +410,6 @@ function obterSessao_(token) {
   } catch (err) {
     return null;
   }
-}
-
-function normalizarTexto(s) {
-  return String(s || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim();
 }
 
 function getFusoHorario_() {

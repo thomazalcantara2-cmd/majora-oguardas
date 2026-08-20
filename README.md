@@ -28,28 +28,37 @@ rodar `inicializarPlanilha()` uma vez para criar os cabeçalhos, ver seção 3).
 
 ### Aba `Cadastro` (pré-carregada por você)
 
-| Coluna | Nome | Observações |
-|---|---|---|
-| A | `Matrícula` | Identificador único do servidor |
-| B | `Nome` | Nome completo |
-| C | `CPF` | **Obrigatório.** Você precisa cruzar/adicionar o CPF de outra base da SEGEP antes da carga, pois os últimos 4 dígitos são a senha de acesso. Aceita com ou sem pontuação (o sistema normaliza) |
-| D | `Classe` | Ex: GM I, GM II, Inspetor, Subinspetor, Subinspetora, Inspetora |
-| E | `Regional` | Ex: Regional 1, Regional 2 e 3, Comando da Guarda, Corregedoria |
-| F | `Requereu_40h` | `Sim` ou `Não` |
-| G | `Data_Requerimento` | Data (e opcionalmente hora) do requerimento original de majoração |
-| H | `Status_Confirmação` | Preenchido pelo sistema: vazio/`Pendente`, `Confirmado`, ou `Corrigido — aguardando validação da SEGEP` |
-| I | `Data_Confirmação` | Preenchida pelo sistema no momento em que o servidor confirma/corrige |
+Sua lista de origem vem como `Ordem | CPF | MATR. | NOME | CLASSE | DATA`. A
+coluna `Ordem` é só a numeração da sua planilha de trabalho e não precisa ir
+para o sistema. O mapeamento para a aba `Cadastro` é:
+
+| Coluna | Nome | Vem de | Observações |
+|---|---|---|---|
+| A | `Matrícula` | `MATR.` | Identificador único do servidor |
+| B | `Nome` | `NOME` | Nome completo |
+| C | `CPF` | `CPF` | Pode nascer vazio e ser preenchido depois, conforme o cruzamento com a base da SEGEP for avançando — só passa a valer como senha de acesso quando estiver preenchido naquela linha. Aceita com ou sem pontuação (o sistema normaliza) |
+| D | `Classe` | `CLASSE` | Ex: GM I, GM II, Inspetor, Subinspetor, Subinspetora, Inspetora |
+| E | `Requereu_40h` | *(não existe na lista de origem)* | A lista inteira é composta por quem já requereu a majoração, então esta coluna deve ser `Sim` em todas as linhas — rode `preencherRequereu40hSeVazio()` uma vez para preencher automaticamente onde estiver em branco |
+| F | `Data_Requerimento` | `DATA` | Data do requerimento original de majoração |
+| G | `Status_Confirmação` | *(gerado pelo sistema)* | Preenchido pelo sistema: vazio/`Pendente`, `Confirmado`, ou `Corrigido — aguardando validação da SEGEP` |
+| H | `Data_Confirmação` | *(gerado pelo sistema)* | Preenchida pelo sistema no momento em que o servidor confirma/corrige |
 
 **Colunas de controle do sistema (não fazem parte da lista original — são criadas e
 usadas apenas para limitar tentativas de senha; não edite manualmente):**
 
 | Coluna | Nome | Observações |
 |---|---|---|
-| J | `Tentativas_Falhas` | Contador de tentativas de senha incorretas para aquele registro |
-| K | `Bloqueado_Até` | Timestamp até quando o acesso àquele registro fica bloqueado, após 5 tentativas erradas |
+| I | `Tentativas_Falhas` | Contador de tentativas de senha incorretas para aquele registro |
+| J | `Bloqueado_Até` | Timestamp até quando o acesso àquele registro fica bloqueado, após 5 tentativas erradas |
 
 A primeira linha deve conter os cabeçalhos exatamente como acima (rode
 `inicializarPlanilha()` para garantir isso automaticamente).
+
+> Como não há mais coluna `Regional`/`Lotação`, a identificação do servidor não
+> depende mais de desambiguar nomes parecidos: o CPF completo, que é único por
+> pessoa, já identifica a linha certa (ver seção 3). Se algum dia vocês
+> quiserem voltar a oferecer busca por nome com lista de sugestões, essa
+> coluna faria falta de novo para diferenciar homônimos.
 
 ### Aba `Log_Alterações` (gerada pelo sistema)
 
@@ -78,8 +87,11 @@ A primeira linha deve conter os cabeçalhos exatamente como acima (rode
 ### 2.1 Preparar a planilha
 
 1. Crie uma Planilha Google nova (ou use uma existente).
-2. Crie a aba `Cadastro` com os cabeçalhos da seção 1 e importe/cole os dados dos
-   servidores (já com a coluna `CPF` preenchida).
+2. Crie a aba `Cadastro` com os cabeçalhos da seção 1 e importe/cole os dados de
+   `MATR.`, `NOME`, `CLASSE` e `DATA` da sua lista de origem (a coluna `Ordem`
+   pode ser descartada). Deixe `CPF` vazio se ainda não tiver sido cruzado —
+   ele pode ser preenchido depois, linha por linha, conforme o cruzamento com
+   a base da SEGEP avançar.
 3. Extensões → Apps Script para abrir o editor vinculado a essa planilha.
 
 ### 2.2 Colar o código
@@ -111,7 +123,10 @@ A primeira linha deve conter os cabeçalhos exatamente como acima (rode
    Planilhas, Drive e serviço de UI) — revise e autorize com a conta que será
    a "dona" do script.
 3. Isso cria/normaliza os cabeçalhos das abas `Cadastro` (incluindo as duas
-   colunas de controle J/K), `Log_Alterações` e `Requerimentos`.
+   colunas de controle I/J), `Log_Alterações` e `Requerimentos`.
+4. Rode também `preencherRequereu40hSeVazio` uma vez (mesmo processo: escolher
+   a função no menu suspenso e clicar em **Executar**) para marcar `Sim` em
+   toda linha cuja coluna `Requereu_40h` esteja em branco.
 
 ### 2.5 Publicar como Web App
 
@@ -140,21 +155,27 @@ muda).
 
 ## 3. Fluxo funcional (como implementado)
 
-1. **Busca por nome** (`buscarServidores`): busca parcial, sem diferenciar
-   maiúsculas/acentos (normalização via `NFD` + remoção de diacríticos).
-   Retorna só `nome` e um campo de desambiguação (`Classe — Regional`) — nunca
-   matrícula, CPF ou outro dado sensível. O identificador retornado ao cliente
-   (`id`) é apenas o número da linha na planilha; sozinho, ele não expõe
-   nenhuma informação pessoal.
+1. **Identificação por CPF** (`buscarPorCpf`): o servidor digita o CPF
+   completo (11 dígitos, com ou sem pontuação). O sistema localiza a linha
+   correspondente na aba `Cadastro` e revela **apenas o nome** — nenhum outro
+   dado (matrícula, classe, status etc.) é retornado nesta etapa. O
+   identificador devolvido ao cliente (`id`) é só o número da linha na
+   planilha; sozinho, ele não expõe nenhuma informação pessoal. Como o CPF é
+   único por pessoa, essa etapa substitui a antiga busca por nome com lista de
+   sugestões — não há mais ambiguidade de homônimos a resolver.
+   Como mitigação simples contra tentativas automatizadas de descobrir nomes
+   testando CPFs em sequência, há também um limite global (todas as sessões
+   somadas) de consultas por minuto (`consultaDentroDoLimiteGlobal_`). Isso
+   **não substitui** um rate-limit por IP — o Apps Script não expõe o IP do
+   cliente (ver seção "LGPD" abaixo) — é só uma segunda camada de fricção.
 2. **Senha** (`validarSenha`): compara os últimos 4 dígitos do CPF armazenado
-   (ignorando pontuação) com o valor digitado. Sempre retorna a mesma
-   mensagem genérica em caso de erro — nunca revela se o problema foi o nome
-   selecionado ou a senha. Após 5 tentativas erradas naquele registro, bloqueia
-   novas tentativas por 15 minutos (contador e bloqueio persistidos nas
-   colunas J/K da aba `Cadastro`, então sobrevivem a reinícios do script).
-   Em caso de sucesso, gera um **token de sessão opaco** (UUID), válido por 15
-   minutos via `CacheService`, e nunca mais reenvia a senha nas chamadas
-   seguintes.
+   (ignorando pontuação) com o valor digitado nesta etapa. Sempre retorna a
+   mesma mensagem genérica em caso de erro. Após 5 tentativas erradas naquele
+   registro, bloqueia novas tentativas por 15 minutos (contador e bloqueio
+   persistidos nas colunas I/J da aba `Cadastro`, então sobrevivem a
+   reinícios do script). Em caso de sucesso, gera um **token de sessão
+   opaco** (UUID), válido por 15 minutos via `CacheService`, e nunca mais
+   reenvia a senha nas chamadas seguintes.
 3. **Exibição dos dados**: o CPF nunca é enviado ao cliente em texto — o
    servidor só vê o placeholder fixo `XXX.XXX.XXX-**`, mesmo sendo o dono do
    registro. Isso é deliberado (ver seção "LGPD" abaixo).
@@ -162,7 +183,7 @@ muda).
    - `Confirmar dados corretos`: grava `Status_Confirmação = Confirmado` e
      `Data_Confirmação = agora`, e uma linha resumo em `Log_Alterações`.
    - `Enviar correção`: para cada campo alterado (`Nome`, `Classe`,
-     `Regional`, `Requereu_40h`, `Data_Requerimento`), grava uma linha em
+     `Requereu_40h`, `Data_Requerimento`), grava uma linha em
      `Log_Alterações` com valor anterior/novo — **sem** sobrescrever a aba
      `Cadastro`. Define `Status_Confirmação = "Corrigido — aguardando
      validação da SEGEP"`.
@@ -176,28 +197,37 @@ muda).
 
 ## 4. Segurança e LGPD
 
-**Por que "últimos 4 dígitos do CPF" é uma senha fraca — e por que isso é
-aceitável aqui:**
+**Por que a identificação por CPF + senha de 4 dígitos é fraca — e por que
+isso é aceitável aqui, com os controles certos:**
 
-O CPF é dado pessoal (LGPD, art. 5º, I). Usar seus últimos 4 dígitos como
-"senha" é um mecanismo de **baixa fricção para autoconfirmação de dados já
-sob custódia da administração**, não uma autenticação forte — os 4 dígitos
-não são segredo (podem ser obtidos por engenharia social, vazamentos ou até
-por parentes/colegas). O sistema foi desenhado assumindo isso, com controles
-compensatórios obrigatórios:
+O CPF é dado pessoal (LGPD, art. 5º, I). Como o fluxo pedido usa o CPF
+completo como chave de busca (etapa 1) e os últimos 4 dígitos do próprio CPF
+como "senha" (etapa 2), é importante deixar claro, sem rodeios, o que isso
+significa na prática: **quem já sabe o CPF completo de alguém também sabe,
+por definição, os últimos 4 dígitos.** A etapa de senha não é um segundo
+fator independente — ela funciona como uma segunda digitação de confirmação
+("você tem certeza de que é você mesmo, e não digitou o CPF de outra pessoa
+por engano"), não como uma barreira adicional contra quem já tem o CPF em
+mãos. O controle de acesso real deste sistema é, na prática, **"só quem sabe
+o CPF de alguém consegue ver o nome e os dados dessa pessoa"** — um
+mecanismo de **baixa fricção para autoconfirmação de dados já sob custódia
+da administração**, não uma autenticação forte. O sistema foi desenhado
+assumindo isso, com controles compensatórios obrigatórios:
 
-- **Nunca expor CPF, matrícula ou outro dado sensível na lista de busca.**
-  A busca por nome retorna só nome + classe/regional (necessários apenas para
-  desambiguar homônimos).
+- **A etapa de CPF revela só o nome, nada além disso.** Matrícula, classe,
+  status e demais dados só aparecem depois da senha confirmada.
+- **Limite global de consultas por minuto** (todas as sessões somadas) na
+  etapa de CPF, para dificultar — sem eliminar — tentativas automatizadas de
+  descobrir nomes testando CPFs em sequência (ver limitação sobre IP abaixo).
 - **Mascaramento total do CPF na tela de dados** — nem o próprio servidor vê
-  o CPF completo (placeholder fixo `XXX.XXX.XXX-**`). Como ele já digitou os
-  4 dígitos que conhece de cor para entrar, não há necessidade de reexibir o
-  CPF; exibi-lo integralmente só aumentaria a superfície de exposição (ex.:
-  print de tela, compartilhamento de tela, uso em local público).
-- **Mensagem de erro genérica**, idêntica para "nome errado" e "senha
-  errada", para não ajudar tentativas de enumeração.
-- **Limite de tentativas** (5) com bloqueio temporário (15 min) por registro,
-  persistido na própria planilha.
+  o CPF completo (placeholder fixo `XXX.XXX.XXX-**`). Como ele já digitou o
+  CPF completo para entrar, não há necessidade de reexibi-lo; mostrar de novo
+  só aumentaria a superfície de exposição (ex.: print de tela,
+  compartilhamento de tela, uso em local público).
+- **Mensagem de erro genérica** na etapa de senha, para não ajudar tentativas
+  de enumeração de quem já passou da etapa de CPF.
+- **Limite de tentativas de senha** (5) com bloqueio temporário (15 min) por
+  registro, persistido na própria planilha.
 - **Nenhuma correção sobrescreve o dado oficial automaticamente** — toda
   alteração proposta pelo servidor fica registrada em log, pendente de
   checagem humana da SEGEP antes de virar dado oficial.
