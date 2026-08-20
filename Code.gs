@@ -52,12 +52,6 @@ var MIME_PERMITIDOS = {
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx'
 };
 
-// Ordem, Data_Requerimento, Classe e Requereu_40h são dados do protocolo
-// original e não passam por autoatendimento: não aparecem no formulário
-// como campos editáveis. Só o Nome pode ser corrigido pelo próprio servidor.
-var CAMPOS_EDITAVEIS = {
-  nome: { rotulo: 'Nome' }
-};
 
 // ===================== WEB APP ENTRY POINTS =====================
 
@@ -268,12 +262,16 @@ function validarSenha(id, senha) {
   };
 }
 
-// ===================== CONFIRMAÇÃO / CORREÇÃO / REQUERIMENTO (ETAPAS 6-8) =====================
+// ===================== CONFIRMAÇÃO / REQUERIMENTO (ETAPAS 6-8) =====================
 
 /**
+ * Todos os dados exibidos (Matrícula, Nome, CPF, Ordem, Data/hora do
+ * requerimento) são somente leitura — não há mais correção de campo pelo
+ * autoatendimento. Se algo estiver errado, o servidor descreve no
+ * Requerimento (texto/anexo); a correção em si é feita manualmente pela
+ * SEGEP na aba Cadastro.
+ *
  * payload = {
- *   acao: 'confirmar' | 'corrigir',
- *   camposEditados: { nome },
  *   requerimentoTexto: string,
  *   anexo: { base64, mimeType, filename } | null
  * }
@@ -291,40 +289,10 @@ function registrarConfirmacao(token, payload) {
   var matricula = valores[COL_MATRICULA - 1];
   var nomeAtual = valores[COL_NOME - 1];
 
-  var atual = {
-    nome: valores[COL_NOME - 1]
-  };
-
   var agora = new Date();
-  var acao = payload.acao === 'corrigir' ? 'corrigir' : 'confirmar';
   var logSheet = getSheet_(SHEET_LOG);
-  var houveAlteracao = false;
-
-  if (acao === 'corrigir') {
-    var editados = payload.camposEditados || {};
-    Object.keys(CAMPOS_EDITAVEIS).forEach(function (campo) {
-      if (!(campo in editados)) return;
-      var def = CAMPOS_EDITAVEIS[campo];
-      var valorAnterior = atual[campo];
-      var valorAnteriorStr = (valorAnterior instanceof Date ? formatarData_(valorAnterior) : String(valorAnterior || '')).trim();
-      var valorNovoStr = String(editados[campo] || '').trim();
-
-      if (valorNovoStr === '' || valorNovoStr === valorAnteriorStr) return;
-
-      // Importante: NÃO sobrescreve a aba Cadastro. Apenas registra a proposta
-      // de correção no Log_Alterações para checagem humana da SEGEP.
-      logSheet.appendRow([agora, matricula, def.rotulo, valorAnteriorStr, valorNovoStr, 'Correção']);
-      houveAlteracao = true;
-    });
-
-    if (houveAlteracao) {
-      sheet.getRange(row, COL_STATUS_CONFIRMACAO).setValue('Corrigido — aguardando validação da SEGEP');
-    }
-  } else {
-    logSheet.appendRow([agora, matricula, '(confirmação integral)', '', '', 'Confirmação']);
-    sheet.getRange(row, COL_STATUS_CONFIRMACAO).setValue('Confirmado');
-  }
-
+  logSheet.appendRow([agora, matricula, '(confirmação integral)', '', '', 'Confirmação']);
+  sheet.getRange(row, COL_STATUS_CONFIRMACAO).setValue('Confirmado');
   sheet.getRange(row, COL_DATA_CONFIRMACAO).setValue(agora);
 
   var requerimentoRecebido = false;
@@ -345,8 +313,6 @@ function registrarConfirmacao(token, payload) {
   return {
     ok: true,
     timestamp: formatarData_(agora, true),
-    acao: acao,
-    correcaoRegistrada: houveAlteracao,
     requerimentoRecebido: requerimentoRecebido
   };
 }

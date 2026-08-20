@@ -50,7 +50,6 @@
     els.anexoError = document.getElementById('anexo-error');
 
     els.btnConfirmar = document.getElementById('btn-confirmar');
-    els.btnCorrigir = document.getElementById('btn-corrigir');
     els.submitError = document.getElementById('submit-error');
 
     els.successMessage = document.getElementById('success-message');
@@ -95,12 +94,7 @@
       }
     });
 
-    els.btnConfirmar.addEventListener('click', function () {
-      enviar('confirmar');
-    });
-    els.btnCorrigir.addEventListener('click', function () {
-      enviar('corrigir');
-    });
+    els.btnConfirmar.addEventListener('click', enviar);
   }
 
   // ---------- etapa 1: identificação por CPF ----------
@@ -206,7 +200,7 @@
     });
   }
 
-  function enviar(acao) {
+  function enviar() {
     hideError(els.submitError);
 
     if (!state.token) {
@@ -222,14 +216,9 @@
 
     setLoading(true);
     els.btnConfirmar.disabled = true;
-    els.btnCorrigir.disabled = true;
 
     var montarPayloadEEnviar = function (anexoPayload) {
       var payload = {
-        acao: acao,
-        camposEditados: {
-          nome: els.fNome.value
-        },
         requerimentoTexto: els.fRequerimentoTexto.value,
         anexo: anexoPayload || null
       };
@@ -238,7 +227,6 @@
         .withSuccessHandler(function (resp) {
           setLoading(false);
           els.btnConfirmar.disabled = false;
-          els.btnCorrigir.disabled = false;
           if (!resp.ok) {
             showError(els.submitError, resp.message || 'Não foi possível registrar. Tente novamente.');
             return;
@@ -248,7 +236,6 @@
         .withFailureHandler(function (err) {
           setLoading(false);
           els.btnConfirmar.disabled = false;
-          els.btnCorrigir.disabled = false;
           showError(els.submitError, 'Erro ao registrar: ' + (err && err.message ? err.message : 'tente novamente.'));
         })
         .registrarConfirmacao(state.token, payload);
@@ -260,7 +247,6 @@
         .catch(function () {
           setLoading(false);
           els.btnConfirmar.disabled = false;
-          els.btnCorrigir.disabled = false;
           showError(els.submitError, 'Erro ao ler o arquivo anexado.');
         });
     } else {
@@ -269,10 +255,7 @@
   }
 
   function mostrarSucesso(resp) {
-    var acaoTexto = resp.acao === 'corrigir'
-      ? 'Sua correção foi registrada e será validada pela SEGEP.'
-      : 'Seus dados foram confirmados.';
-    els.successMessage.textContent = acaoTexto + ' Registrado em ' + resp.timestamp + '.';
+    els.successMessage.textContent = 'Seus dados foram confirmados. Registrado em ' + resp.timestamp + '.';
 
     if (resp.requerimentoRecebido) {
       els.successRequerimento.textContent = 'Seu requerimento (texto e/ou anexo) também foi recebido e está pendente de análise.';

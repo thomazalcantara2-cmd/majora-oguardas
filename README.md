@@ -1,8 +1,8 @@
 # Sistema de Confirmação de Dados Cadastrais — Majoração de Jornada 40h
 
-Aplicação web (Google Apps Script + Google Sheets) para que servidores confirmem ou
-corrijam seus próprios dados de requerimento de majoração de jornada semanal de 30h
-para 40h, e opcionalmente registrem um requerimento em texto com anexo.
+Aplicação web (Google Apps Script + Google Sheets) para que servidores confirmem os
+próprios dados de requerimento de majoração de jornada semanal de 30h para 40h, e
+registrem um requerimento em texto com anexo, se precisarem relatar algo.
 
 ## Arquivos deste projeto
 
@@ -34,14 +34,14 @@ mapeamento para a aba `Cadastro` é:
 | Coluna | Nome | Vem de | Observações |
 |---|---|---|---|
 | A | `Matrícula` | `MATR.` | Identificador único do servidor |
-| B | `Nome` | `NOME` | Nome completo — único campo editável pelo próprio servidor |
+| B | `Nome` | `NOME` | Nome completo |
 | C | `CPF` | `CPF` | Pode nascer vazio e ser preenchido depois, conforme o cruzamento com a base da SEGEP for avançando — só passa a valer como senha de acesso quando estiver preenchido naquela linha. Aceita com ou sem pontuação (o sistema normaliza) |
 | D | `Classe` | `CLASSE` | Ex: GM I, GM II, Inspetor, Subinspetor, Subinspetora, Inspetora. **Não aparece na página** — fica só na planilha, para uso interno da SEGEP |
 | E | `Ordem` | `Ordem` | Número de ordem do protocolo original. Exibido na página, mas **somente leitura** |
 | F | `Data_Requerimento` | `DATA` | Data (e hora, se houver) do requerimento original de majoração. Exibido na página, mas **somente leitura** |
 | G | `Requereu_40h` | *(não existe na lista de origem)* | A lista inteira é composta por quem já requereu a majoração, então esta coluna deve ser `Sim` em todas as linhas — rode `preencherRequereu40hSeVazio()` uma vez para preencher automaticamente onde estiver em branco. **Não aparece na página** |
-| H | `Status_Confirmação` | *(gerado pelo sistema)* | Preenchido pelo sistema: vazio/`Pendente`, `Confirmado`, ou `Corrigido — aguardando validação da SEGEP` |
-| I | `Data_Confirmação` | *(gerado pelo sistema)* | Preenchida pelo sistema no momento em que o servidor confirma/corrige |
+| H | `Status_Confirmação` | *(gerado pelo sistema)* | Preenchido pelo sistema: vazio/`Pendente` ou `Confirmado` |
+| I | `Data_Confirmação` | *(gerado pelo sistema)* | Preenchida pelo sistema no momento em que o servidor confirma |
 
 **Colunas de controle do sistema (não fazem parte da lista original — são criadas e
 usadas apenas para limitar tentativas de senha; não edite manualmente):**
@@ -56,22 +56,24 @@ A primeira linha deve conter os cabeçalhos exatamente como acima (rode
 
 > `Classe` e `Requereu_40h` continuam na planilha (podem ser úteis para
 > filtros e relatórios internos da SEGEP), mas não são exibidas nem
-> perguntadas na página — o servidor só confere Nome, Ordem, Data/hora do
-> requerimento e o status. Como não há mais coluna `Regional`/`Lotação`, a
-> identificação também não depende de desambiguar nomes parecidos: o CPF
-> completo, que é único por pessoa, já identifica a linha certa (ver seção 3).
+> perguntadas na página. Todos os dados exibidos — Matrícula, Nome, CPF
+> mascarado, Ordem, Data/hora do requerimento e status — são **somente
+> leitura**: o servidor confere, mas não edita nada por aqui (ver seção 3).
+> Como não há mais coluna `Regional`/`Lotação`, a identificação também não
+> depende de desambiguar nomes parecidos: o CPF completo, que é único por
+> pessoa, já identifica a linha certa.
 
 ### Aba `Log_Alterações` (gerada pelo sistema)
 
 | Timestamp | Matrícula | Campo_Alterado | Valor_Anterior | Valor_Novo | Tipo |
 |---|---|---|---|---|---|
 
-- Uma linha é criada para cada campo corrigido (`Tipo = Correção`), ou uma linha
-  resumo quando o servidor apenas confirma (`Tipo = Confirmação`).
-- **Correções nunca sobrescrevem a aba `Cadastro` automaticamente.** O dado
-  "oficial" só é atualizado depois que a SEGEP checar o log e editar a aba
-  `Cadastro` manualmente. Isso evita que um erro de digitação do servidor vire
-  dado oficial sem checagem humana.
+- Uma linha resumo (`Tipo = Confirmação`) é criada a cada vez que o servidor
+  confirma os dados.
+- Como nenhum campo é editável pelo autoatendimento, não há mais linhas de
+  correção geradas automaticamente nesta aba — se o servidor perceber algo
+  errado, ele relata no campo "Requerimento" (aba `Requerimentos`), e a
+  correção em si é feita manualmente pela SEGEP direto na aba `Cadastro`.
 
 ### Aba `Requerimentos` (gerada pelo sistema, só ganha linha se o servidor preencher algo)
 
@@ -124,7 +126,7 @@ A primeira linha deve conter os cabeçalhos exatamente como acima (rode
    Planilhas, Drive e serviço de UI) — revise e autorize com a conta que será
    a "dona" do script.
 3. Isso cria/normaliza os cabeçalhos das abas `Cadastro` (incluindo as duas
-   colunas de controle I/J), `Log_Alterações` e `Requerimentos`.
+   colunas de controle J/K), `Log_Alterações` e `Requerimentos`.
 4. Rode também `preencherRequereu40hSeVazio` uma vez (mesmo processo: escolher
    a função no menu suspenso e clicar em **Executar**) para marcar `Sim` em
    toda linha cuja coluna `Requereu_40h` esteja em branco.
@@ -140,7 +142,7 @@ A primeira linha deve conter os cabeçalhos exatamente como acima (rode
 5. **Quem pode acessar**: "Qualquer pessoa" (ou "Qualquer pessoa com o link"),
    já que os servidores não necessariamente têm conta Google corporativa e não
    devem precisar fazer login para acessar — a autenticação é feita pela
-   própria aplicação (nome + senha = últimos 4 dígitos do CPF).
+   própria aplicação (CPF + senha = últimos 4 dígitos do CPF).
 6. Clique em **Implantar** e autorize novamente se solicitado.
 7. Copie a **URL do app da Web** gerada — esse é o link único a compartilhar
    com os servidores.
@@ -181,19 +183,17 @@ muda).
    servidor só vê o placeholder fixo `XXX.XXX.XXX-**`, mesmo sendo o dono do
    registro. Isso é deliberado (ver seção "LGPD" abaixo). A tela mostra
    Matrícula, Nome, CPF mascarado, Ordem, Data/hora do requerimento e status
-   — `Classe` e `Requereu_40h` não são exibidas (ficam só na planilha).
-   `Ordem` e `Data/hora do requerimento` aparecem desabilitadas: são dados do
-   protocolo original, não passam por autoatendimento.
-4. **Confirmar / Corrigir** (`registrarConfirmacao`):
-   - `Confirmar dados corretos`: grava `Status_Confirmação = Confirmado` e
-     `Data_Confirmação = agora`, e uma linha resumo em `Log_Alterações`.
-   - `Enviar correção`: hoje o único campo editável é `Nome`. Se ele for
-     alterado, grava uma linha em `Log_Alterações` com valor anterior/novo —
-     **sem** sobrescrever a aba `Cadastro`. Define `Status_Confirmação =
-     "Corrigido — aguardando validação da SEGEP"`.
-   - Em ambos os casos, se o servidor preencheu texto de requerimento e/ou
-     anexo, uma linha é criada em `Requerimentos` (`Status_Análise =
-     Pendente`) e o arquivo é salvo na pasta do Drive configurada.
+   — `Classe` e `Requereu_40h` não são exibidas (ficam só na planilha). Todos
+   os campos aparecem desabilitados: nada nessa tela é editável pelo
+   autoatendimento.
+4. **Confirmar** (`registrarConfirmacao`): grava `Status_Confirmação =
+   Confirmado` e `Data_Confirmação = agora`, e uma linha resumo em
+   `Log_Alterações`. Se o servidor preencheu texto de requerimento e/ou
+   anexo, uma linha também é criada em `Requerimentos` (`Status_Análise =
+   Pendente`) e o arquivo é salvo na pasta do Drive configurada — esse
+   requerimento é o canal para relatar qualquer dado incorreto; a correção em
+   si é feita manualmente pela SEGEP na aba `Cadastro`, depois de ler o
+   requerimento.
 5. **Tela final**: confirma o registro com data/hora e menciona se o
    requerimento foi recebido.
 
@@ -232,11 +232,12 @@ assumindo isso, com controles compensatórios obrigatórios:
   de enumeração de quem já passou da etapa de CPF.
 - **Limite de tentativas de senha** (5) com bloqueio temporário (15 min) por
   registro, persistido na própria planilha.
-- **Nenhuma correção sobrescreve o dado oficial automaticamente** — toda
-  alteração proposta pelo servidor fica registrada em log, pendente de
-  checagem humana da SEGEP antes de virar dado oficial.
+- **Nenhum campo é editável pelo autoatendimento** — toda a tela de dados é
+  somente leitura. Se algo estiver errado, o relato vai pelo Requerimento e a
+  correção em si é feita manualmente pela SEGEP na aba `Cadastro`, nunca
+  automaticamente a partir do que o servidor digitou.
 - **Token de sessão de curta duração** — depois da senha validada, as ações
-  seguintes (confirmar/corrigir/enviar requerimento) usam um token opaco de
+  seguintes (confirmar dados / enviar requerimento) usam um token opaco de
   15 minutos, não a senha ou a matrícula.
 - **Anexos** ficam em uma pasta do Drive controlada por você (não pública por
   padrão), e o link salvo na planilha `Requerimentos` só é visível a quem tem
@@ -266,8 +267,7 @@ integridade) — avise se quiser que essa coluna extra seja adicionada ao log.
 - O token de sessão usa `CacheService` (memória temporária do Google, até 15
   min). Isso é intencional: nada de identidade fica "lembrado" além do tempo
   necessário para o servidor concluir o formulário.
-- Campos `Matrícula`, `CPF`, `Ordem` e `Data_Requerimento` não são editáveis
-  pelo próprio servidor nesta tela (matrícula é a chave do registro; CPF é a
-  própria credencial de acesso; Ordem e Data/hora do requerimento são dados
-  de protocolo — qualquer correção neles deve ser tratada diretamente com a
-  SEGEP). Hoje só `Nome` pode ser corrigido pelo servidor.
+- Nenhum campo é editável pelo próprio servidor nesta tela — toda a tela de
+  dados (Matrícula, Nome, CPF, Ordem, Data/hora do requerimento) é somente
+  leitura. Qualquer correção deve ser tratada diretamente com a SEGEP,
+  normalmente a partir do que o servidor descrever no campo Requerimento.

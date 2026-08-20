@@ -40,7 +40,7 @@
       <!-- ETAPA 3: DADOS + REQUERIMENTO -->
       <section id="step-data" class="step hidden">
         <h2>Seus dados</h2>
-        <p class="hint">Confira os dados abaixo. Se algo estiver incorreto, edite o campo e clique em "Enviar correção".</p>
+        <p class="hint">Confira os dados abaixo.</p>
 
         <form id="data-form">
           <div class="field">
@@ -49,12 +49,11 @@
           </div>
           <div class="field">
             <label for="f-nome">Nome</label>
-            <input type="text" id="f-nome" />
+            <input type="text" id="f-nome" disabled />
           </div>
           <div class="field">
             <label for="f-cpf">CPF</label>
             <input type="text" id="f-cpf" disabled />
-            <p class="hint">O CPF não é exibido por completo, por motivos de segurança (LGPD). Alterações de CPF devem ser tratadas diretamente com a SEGEP.</p>
           </div>
           <div class="field">
             <label for="f-ordem">Ordem</label>
@@ -63,7 +62,6 @@
           <div class="field">
             <label for="f-data-requerimento">Data/hora do requerimento</label>
             <input type="text" id="f-data-requerimento" disabled />
-            <p class="hint">Ordem e data/hora são dados do protocolo original e não podem ser alterados por aqui. Se algo estiver errado, procure a SEGEP diretamente.</p>
           </div>
           <div class="field">
             <label for="f-status">Status atual</label>
@@ -72,8 +70,8 @@
 
           <hr />
 
-          <h2>Requerimento (opcional)</h2>
-          <p class="hint">Use este espaço para justificativa, observação ou pedido relacionado à majoração de jornada. Não é obrigatório.</p>
+          <h2>Requerimento</h2>
+          <p class="hint">Use este espaço para justificativa, observação ou pedido relacionado à majoração de jornada.</p>
           <div class="field">
             <label for="f-requerimento-texto">Texto do requerimento</label>
             <textarea id="f-requerimento-texto" rows="5" maxlength="4000" placeholder="Escreva aqui, se necessário..."></textarea>
@@ -86,7 +84,6 @@
 
           <div class="actions">
             <button type="button" id="btn-confirmar" class="btn btn-primary">Confirmar dados corretos</button>
-            <button type="button" id="btn-corrigir" class="btn btn-secondary">Enviar correção</button>
           </div>
           <p id="submit-error" class="error-message hidden"></p>
         </form>
