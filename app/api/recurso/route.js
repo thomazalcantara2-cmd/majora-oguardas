@@ -5,6 +5,7 @@ import { formatarData } from '../../../lib/format';
 import { gerarPdfRecurso } from '../../../lib/pdf';
 
 const TAMANHO_MAXIMO_TEXTO = 8000;
+const TAMANHO_MAXIMO_ANEXO = 3 * 1024 * 1024; // 3 MB — margem segura sob o limite de payload do Vercel
 
 export async function POST(request) {
   let body;
@@ -35,6 +36,21 @@ export async function POST(request) {
     });
   }
 
+  let anexo = null;
+  if (body.anexo && body.anexo.conteudoBase64) {
+    if (!body.anexo.nomeArquivo) {
+      return NextResponse.json({ ok: false, message: 'Anexo inválido.' });
+    }
+    const buffer = Buffer.from(body.anexo.conteudoBase64, 'base64');
+    if (buffer.length > TAMANHO_MAXIMO_ANEXO) {
+      return NextResponse.json({
+        ok: false,
+        message: 'O anexo excede o tamanho máximo permitido (3 MB).'
+      });
+    }
+    anexo = { buffer, nomeArquivo: body.anexo.nomeArquivo, tipo: body.anexo.tipo || 'application/octet-stream' };
+  }
+
   const servidor = await obterServidorPorId(servidorId);
   if (!servidor) {
     return NextResponse.json({
@@ -56,16 +72,18 @@ export async function POST(request) {
     dataHora
   });
 
-  const recursoPdfUrl = await registrarRecurso({
+  const { pdfUrl: recursoPdfUrl, anexoUrl } = await registrarRecurso({
     id: servidor.id,
     matricula: servidor.matricula,
     nome: servidor.nome,
-    bufferPdf: pdfBuffer
+    bufferPdf: pdfBuffer,
+    anexo
   });
 
   return NextResponse.json({
     ok: true,
     timestamp: dataHora,
-    recursoPdfUrl
+    recursoPdfUrl,
+    anexoUrl
   });
 }

@@ -19,7 +19,8 @@ recurso.
 | Framework | Next.js (App Router), hospedado no Vercel |
 | Banco de dados | A própria Planilha Google — lida/escrita através de um Web App do Apps Script |
 | Resposta (Minuta de Voto) | Localizada dinamicamente na pasta do próprio servidor no Drive (arquivo PDF com "MINUTA" no nome); se ainda não existir por lá, cai para o PDF estático em `public/respostas/<matricula_key>.pdf` |
-| Recurso (gerado pelo servidor) | PDF gerado em tempo real (`pdfkit`), no mesmo padrão visual do Requerimento original, e salvo na pasta do próprio servidor no Drive (via o mesmo Apps Script) com o nome `RECURSO_<NOME>_<data>_<hora>.pdf`; o link fica na coluna `Recurso` da planilha |
+| Recurso (gerado pelo servidor) | PDF gerado em tempo real (`pdfkit`), no mesmo padrão visual do Requerimento original, e salvo na pasta do próprio servidor no Drive (via o mesmo Apps Script) como `RECURSO_<NOME DO SERVIDOR>.pdf`; o link fica na coluna `Recurso` da planilha |
+| Anexo do recurso (opcional) | Arquivo enviado pelo servidor junto com o recurso (PDF, imagem ou Word, até 3 MB), salvo na mesma pasta como `RECURSO_<NOME DO SERVIDOR>.<extensão original>`; o link fica na coluna `Anexo_Recurso` |
 | Sessão pós-senha | Token assinado (JWT), sem estado guardado no servidor |
 
 Como o repositório já está conectado ao Vercel, **qualquer push nesta branch
@@ -48,7 +49,7 @@ gera um novo deploy automaticamente**.
 
 ## 1. Estrutura da planilha
 
-Colunas A-K já existem na planilha de origem; L-N são criadas pelo
+Colunas A-K já existem na planilha de origem; L-O são criadas pelo
 `inicializarPlanilha()` do Apps Script (seção 2.2):
 
 | Coluna | Nome | Observações |
@@ -64,6 +65,7 @@ Colunas A-K já existem na planilha de origem; L-N são criadas pelo
 | L | `Data_Recurso` | **Escrita pelo app**: data/hora do envio (ISO 8601) |
 | M | `Tentativas_Falhas` | **Escrita pelo app**: controle de tentativas de senha — não edite manualmente |
 | N | `Bloqueado_Até` | **Escrita pelo app**: bloqueio temporário após 5 tentativas erradas — não edite manualmente |
+| O | `Anexo_Recurso` | **Escrita pelo app**: link do anexo enviado junto com o recurso (opcional) |
 
 Uma segunda aba, **`Log_Eventos`**, registra para auditoria cada acesso à
 resposta e cada recurso apresentado (`Timestamp | Matrícula | Tipo`).
@@ -173,17 +175,22 @@ Não tem problema deixá-lo conectado também, só fica sem uso.
 3. **Sua manifestação**: mostra a decisão (`Deferido`/`Indeferido`) e um
    botão para baixar a resposta completa. Se um recurso já tiver sido
    enviado antes (coluna `Recurso` preenchida), mostra a data e o link para
-   baixá-lo, com a opção de enviar um novo (substitui o anterior).
+   baixá-lo (e o do anexo, se houver), com a opção de enviar um novo
+   (substitui o anterior).
 4. **Recurso** (`POST /api/recurso`): o texto digitado é transformado em PDF
    (`lib/pdf.js`, no mesmo layout institucional do Requerimento original —
    cabeçalho, identificação do recorrente com CPF completo, fundamentos,
-   declaração e assinatura eletrônica) e enviado ao Apps Script em base64,
-   que salva o arquivo na pasta do próprio servidor no Drive com o nome
-   `RECURSO_<NOME>_<data>_<hora>.pdf` e devolve a URL; essa URL e a data são
-   gravadas nas colunas `Recurso`/`Data_Recurso`, e uma linha é adicionada à
-   aba `Log_Eventos`.
+   declaração e assinatura eletrônica); o servidor também pode anexar um
+   arquivo (PDF, imagem ou Word, até 3 MB). Os dois são enviados ao Apps
+   Script em base64, que salva na pasta do próprio servidor no Drive como
+   `RECURSO_<NOME DO SERVIDOR>.pdf` e `RECURSO_<NOME DO SERVIDOR>.<extensão
+   original>` — um envio novo substitui o anterior (o arquivo antigo com o
+   mesmo nome vai para a lixeira do Drive antes de salvar o novo) — e
+   devolve as URLs; elas e a data são gravadas nas colunas
+   `Recurso`/`Anexo_Recurso`/`Data_Recurso`, e uma linha é adicionada à aba
+   `Log_Eventos`.
 5. **Tela final**: confirma o registro com data/hora e link para baixar o
-   recurso gerado.
+   recurso gerado (e o anexo, se enviado).
 
 ---
 
@@ -219,6 +226,11 @@ autenticação forte). Pontos específicos desta fase:
   Minuta de Voto dele), então herda o compartilhamento que essa pasta já
   tiver — mas o arquivo individual, por padrão, também fica acessível a
   qualquer um com o link direto, não só a quem já tinha acesso à pasta.
+- **Anexo do recurso**: mesmo modelo de compartilhamento do PDF do recurso
+  (link direto, sem autenticação adicional). Aceita qualquer arquivo até
+  3 MB — o app não faz varredura de antivírus nem valida o conteúdo além do
+  tamanho, então trate-o com a mesma cautela que qualquer upload de usuário
+  final.
 - **O texto do recurso não fica na planilha** — só o link do PDF gerado.
 - **A conta que implanta o Web App do Apps Script passa a poder criar/ler
   arquivos no Drive dela** (escopo `drive` adicionado quando o app passou a

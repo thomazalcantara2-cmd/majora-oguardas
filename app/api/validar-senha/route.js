@@ -74,7 +74,8 @@ export async function POST(request) {
       respostaUrl,
       recursoJaEnviado: Boolean(servidor.recurso_pdf_url),
       dataRecurso: servidor.data_recurso ? formatarData(servidor.data_recurso, true) : '',
-      recursoPdfUrl: servidor.recurso_pdf_url || ''
+      recursoPdfUrl: servidor.recurso_pdf_url || '',
+      anexoRecursoUrl: servidor.anexo_recurso_url || ''
     }
   });
 }

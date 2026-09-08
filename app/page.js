@@ -6,6 +6,16 @@ const STEPS = ['search', 'password', 'data', 'success'];
 const GRUPO_DA_ETAPA = { search: 0, password: 0, data: 1, success: 2 };
 const GRUPOS = ['Identificação', 'Manifestação', 'Protocolo'];
 const TAMANHO_MAXIMO_TEXTO = 8000;
+const TAMANHO_MAXIMO_ANEXO = 3 * 1024 * 1024; // 3 MB
+
+function lerArquivoComoBase64(arquivo) {
+  return new Promise((resolve, reject) => {
+    const leitor = new FileReader();
+    leitor.onload = () => resolve(String(leitor.result).split(',')[1] || '');
+    leitor.onerror = () => reject(leitor.error);
+    leitor.readAsDataURL(arquivo);
+  });
+}
 
 export default function Page() {
   const [step, setStep] = useState('search');
@@ -23,6 +33,7 @@ export default function Page() {
   const [dados, setDados] = useState(null);
 
   const [recursoTexto, setRecursoTexto] = useState('');
+  const [recursoAnexo, setRecursoAnexo] = useState(null);
   const [editandoRecurso, setEditandoRecurso] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [successInfo, setSuccessInfo] = useState(null);
@@ -85,6 +96,7 @@ export default function Page() {
       setToken(json.token);
       setDados(json.dados);
       setRecursoTexto('');
+      setRecursoAnexo(null);
       setEditandoRecurso(!json.dados.recursoJaEnviado);
       setSubmitError('');
       irParaEtapa('data');
@@ -111,12 +123,27 @@ export default function Page() {
       return;
     }
 
+    let anexo = null;
+    if (recursoAnexo) {
+      if (recursoAnexo.size > TAMANHO_MAXIMO_ANEXO) {
+        setSubmitError('O anexo excede o tamanho máximo permitido (3 MB).');
+        return;
+      }
+      try {
+        const conteudoBase64 = await lerArquivoComoBase64(recursoAnexo);
+        anexo = { nomeArquivo: recursoAnexo.name, tipo: recursoAnexo.type, conteudoBase64 };
+      } catch (err) {
+        setSubmitError('Não foi possível ler o arquivo anexado. Tente novamente.');
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       const resp = await fetch('/api/recurso', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, texto })
+        body: JSON.stringify({ token, texto, anexo })
       });
       const json = await resp.json();
       if (!json.ok) {
@@ -124,6 +151,7 @@ export default function Page() {
         return;
       }
       setSuccessInfo(json);
+      setRecursoAnexo(null);
       irParaEtapa('success');
     } catch (err) {
       setSubmitError('Erro ao registrar. Tente novamente.');
@@ -295,6 +323,17 @@ export default function Page() {
                     Baixar meu recurso (PDF)
                   </a>
                 )}
+                {dados.anexoRecursoUrl && (
+                  <a
+                    href={dados.anexoRecursoUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn-ghost"
+                    style={{ display: 'block', marginTop: 10 }}
+                  >
+                    Baixar anexo enviado
+                  </a>
+                )}
                 <button type="button" className="btn-ghost" style={{ marginTop: 16 }} onClick={() => setEditandoRecurso(true)}>
                   Enviar um novo recurso (substitui o anterior)
                 </button>
@@ -309,6 +348,14 @@ export default function Page() {
                   value={recursoTexto}
                   onChange={(e) => setRecursoTexto(e.target.value)}
                 />
+                <label htmlFor="f-recurso-anexo">Anexo (opcional)</label>
+                <input
+                  id="f-recurso-anexo"
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                  onChange={(e) => setRecursoAnexo(e.target.files && e.target.files[0] ? e.target.files[0] : null)}
+                />
+                <p className="field-hint">PDF, imagem ou Word — até 3 MB.</p>
                 <button type="button" className="btn btn-primary" onClick={enviarRecurso} disabled={loading}>
                   Enviar recurso
                 </button>
@@ -340,6 +387,17 @@ export default function Page() {
               {successInfo.recursoPdfUrl && (
                 <a href={successInfo.recursoPdfUrl} target="_blank" rel="noreferrer" className="btn btn-primary">
                   Baixar meu recurso (PDF)
+                </a>
+              )}
+              {successInfo.anexoUrl && (
+                <a
+                  href={successInfo.anexoUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-ghost"
+                  style={{ display: 'block', textAlign: 'center', marginTop: 10 }}
+                >
+                  Baixar anexo enviado
                 </a>
               )}
             </div>

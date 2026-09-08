@@ -24,7 +24,8 @@ var COLUNAS = [
   'Recurso', // K — link do PDF do recurso, escrito pelo app
   'Data_Recurso', // L — escrito pelo app
   'Tentativas_Falhas', // M — escrito pelo app
-  'Bloqueado_Até' // N — escrito pelo app
+  'Bloqueado_Até', // N — escrito pelo app
+  'Anexo_Recurso' // O — link do anexo do recurso (opcional), escrito pelo app
 ];
 var ABA_LOG = 'Log_Eventos';
 
@@ -66,6 +67,11 @@ function doPost(e) {
         return responderJson_({ ok: true });
       case 'salvarPdfRecurso':
         return responderJson_({ ok: true, url: salvarPdfRecurso_(payload.nome, payload.base64) });
+      case 'salvarAnexoRecurso':
+        return responderJson_({
+          ok: true,
+          url: salvarAnexoRecurso_(payload.nome, payload.base64, payload.nomeArquivo, payload.tipo)
+        });
       case 'obterLinkResposta':
         return responderJson_({ ok: true, url: obterLinkResposta_(payload.nome) });
       default:
@@ -190,36 +196,78 @@ function obterLinkResposta_(nome) {
   return arquivo.getUrl();
 }
 
+/** Mesma limpeza de nome usada no processo antigo para nomear arquivos:
+ * maiúsculas, só letras/números/espaço, sem sobras nas pontas. */
+function limparNomeArquivo_(nome) {
+  return String(nome || '')
+    .replace(/[^a-zA-Z0-9À-ÿ ]/g, '')
+    .trim()
+    .toUpperCase();
+}
+
+/**
+ * Cria um arquivo na pasta do servidor com um nome fixo (sem carimbo de
+ * data/hora) — se já existir um arquivo com esse nome (envio anterior),
+ * manda para a lixeira antes, para o novo "substituir" o antigo em vez de
+ * empilhar cópias. Devolve o arquivo criado.
+ */
+function substituirArquivoNaPasta_(pasta, nomeArquivo, blob) {
+  var existentes = pasta.getFilesByName(nomeArquivo);
+  while (existentes.hasNext()) {
+    existentes.next().setTrashed(true);
+  }
+  var arquivo = pasta.createFile(blob);
+  arquivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return arquivo;
+}
+
 /**
  * Recebe o PDF do recurso (base64) e salva na pasta do próprio servidor,
- * no mesmo padrão de nome usado para o Requerimento original
- * ("RECURSO_<NOME>_<DD-MM-AAAA>_<HH-MM>.pdf"). Devolve a URL do arquivo.
+ * como "RECURSO_<NOME DO SERVIDOR>.pdf" — um envio novo substitui o
+ * anterior. Devolve a URL do arquivo.
  */
 function salvarPdfRecurso_(nome, base64) {
   if (!base64) throw new Error('PDF vazio.');
   var pasta = getPastaServidor_(nome);
-
-  var agora = new Date();
-  var carimbo = Utilities.formatDate(agora, Session.getScriptTimeZone() || 'America/Recife', 'dd-MM-yyyy_HH-mm');
-  var nomeArquivo = 'RECURSO_' + nome + '_' + carimbo + '.pdf';
-
+  var nomeArquivo = 'RECURSO_' + limparNomeArquivo_(nome) + '.pdf';
   var bytes = Utilities.base64Decode(base64);
   var blob = Utilities.newBlob(bytes, 'application/pdf', nomeArquivo);
-  var arquivo = pasta.createFile(blob);
-  arquivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  var arquivo = substituirArquivoNaPasta_(pasta, nomeArquivo, blob);
+  return arquivo.getUrl();
+}
+
+/**
+ * Recebe o anexo do recurso (base64) e salva na pasta do próprio servidor,
+ * como "RECURSO_<NOME DO SERVIDOR>.<extensão original>" — mesmo padrão de
+ * nome do PDF do recurso, para os dois ficarem juntos e identificáveis na
+ * pasta. Um envio novo substitui o anterior. Devolve a URL do arquivo.
+ */
+function salvarAnexoRecurso_(nome, base64, nomeArquivoOriginal, tipoMime) {
+  if (!base64) throw new Error('Anexo vazio.');
+  var pasta = getPastaServidor_(nome);
+
+  var extensao = '';
+  if (nomeArquivoOriginal && nomeArquivoOriginal.indexOf('.') !== -1) {
+    extensao = '.' + nomeArquivoOriginal.split('.').pop();
+  }
+  var nomeArquivo = 'RECURSO_' + limparNomeArquivo_(nome) + extensao;
+
+  var bytes = Utilities.base64Decode(base64);
+  var blob = Utilities.newBlob(bytes, tipoMime || 'application/octet-stream', nomeArquivo);
+  var arquivo = substituirArquivoNaPasta_(pasta, nomeArquivo, blob);
   return arquivo.getUrl();
 }
 
 // ===================== SETUP (rodar pelo editor, uma vez cada) =====================
 
 /**
- * Garante as colunas de controle (L-N) na aba de dados e cria a aba
+ * Garante as colunas de controle (L-O) na aba de dados e cria a aba
  * Log_Eventos, se ainda não existirem. Não mexe nas colunas A-K originais.
  * Rode pelo menu suspenso de funções → Executar. Idempotente.
  */
 function inicializarPlanilha() {
   var aba = getAbaDados_();
-  var extras = ['Recurso', 'Data_Recurso', 'Tentativas_Falhas', 'Bloqueado_Até'];
+  var extras = ['Recurso', 'Data_Recurso', 'Tentativas_Falhas', 'Bloqueado_Até', 'Anexo_Recurso'];
   var colunaInicial = COLUNAS.indexOf('Recurso') + 1; // K = 11
 
   for (var i = 0; i < extras.length; i++) {
