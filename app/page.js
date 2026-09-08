@@ -164,8 +164,6 @@ export default function Page() {
 
   return (
     <div className="page-shell">
-      <div className="textura-faixa" aria-hidden="true" />
-
       <header className="site-header">
         <div className="header-inner">
           <img src="/logo-pmjg.png" alt="Jaboatão dos Guararapes" className="header-logo" />

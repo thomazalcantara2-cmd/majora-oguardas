@@ -89,16 +89,6 @@ body {
   background: var(--paper);
 }
 
-.textura-faixa {
-  height: 14px;
-  width: 100%;
-  background-image: url('/faixa-textura.svg');
-  background-repeat: repeat-x;
-  background-position: left center;
-  background-size: auto 14px;
-  flex-shrink: 0;
-}
-
 .site-header {
   background: var(--surface);
   border-bottom: 1px solid var(--line);
