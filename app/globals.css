@@ -82,171 +82,231 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.shell {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 24px 32px 56px;
+.page-shell {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  background: var(--paper);
 }
 
-.org-row {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 14px;
-  padding-bottom: 10px;
+.textura-faixa {
+  height: 14px;
+  width: 100%;
+  background-image: url('/faixa-textura.svg');
+  background-repeat: repeat-x;
+  background-position: left center;
+  background-size: auto 14px;
+  flex-shrink: 0;
+}
+
+.site-header {
+  background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
 
-.org-text {
-  min-width: 0;
+.header-inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 18px 32px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
 }
 
-.org-line1 {
-  margin: 0;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--ink);
-}
-
-.org-line2 {
-  margin: 2px 0 0;
-  font-size: 0.64rem;
-  letter-spacing: 0.01em;
-  color: var(--ink-soft);
-  line-height: 1.35;
-}
-
-.org-logo {
-  height: 32px;
+.header-logo {
+  height: 58px;
   width: auto;
   flex-shrink: 0;
 }
 
-.hero {
-  margin-top: 4px;
-  padding: 26px 26px 24px;
-  border-radius: 18px;
-  background: linear-gradient(135deg, var(--amarelo) 0%, var(--laranja) 100%);
+.header-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--line);
+  flex-shrink: 0;
 }
 
-.stripe-meta {
+.header-text {
+  min-width: 0;
+}
+
+.header-overline {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--laranja);
+}
+
+.header-title {
+  margin: 2px 0 0;
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--brand);
+}
+
+.hero {
+  background: linear-gradient(135deg, var(--amarelo) 0%, var(--laranja) 100%);
+  border-bottom: 6px solid var(--brand);
+}
+
+.hero-inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 40px 32px 44px;
+}
+
+.hero-content {
+  max-width: 620px;
+  text-align: left;
+}
+
+.hero-badge {
+  display: inline-block;
+  background: var(--brand);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  border-radius: 999px;
+  margin-bottom: 14px;
+}
+
+.hero-title {
+  margin: 0 0 12px;
+  font-size: 46px;
+  line-height: 1.05;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  color: #10233f;
+}
+
+.hero-lede {
+  margin: 0;
+  font-size: 16px;
+  color: #4a3405;
+  max-width: 56ch;
+}
+
+.container {
+  max-width: 1080px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 32px;
+}
+
+.etapas-card {
+  position: relative;
+  margin-top: -22px;
+  background: var(--surface);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 20px 24px;
+  z-index: 2;
+}
+
+.etapas-row {
   display: flex;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.etapa {
+  display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 6px;
-  margin-bottom: 12px;
+  flex: 0 0 auto;
 }
 
-.stripe {
-  display: inline-block;
-  height: 4px;
-  border-radius: 2px;
+.etapa-linha {
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+  margin-top: 14px;
 }
 
-.stripe-amarela {
-  width: 30px;
+.etapa-linha.done {
   background: var(--brand);
 }
 
-.stripe-verde {
-  width: 12px;
-  background: var(--success);
-}
-
-.stripe-label {
-  font-size: 0.68rem;
+.etapa-circulo {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  background: var(--line);
+  color: var(--ink-faint);
+}
+
+.etapa.current .etapa-circulo {
+  background: var(--brand);
+  color: #ffffff;
+}
+
+.etapa.done .etapa-circulo {
+  background: var(--success);
+  color: #ffffff;
+}
+
+.etapa-rotulo {
+  font-size: 13px;
+  font-weight: 700;
   text-transform: uppercase;
-  color: var(--ink);
-  opacity: 0.72;
-  margin-left: 4px;
+  letter-spacing: 0.04em;
+  color: #9aa6b8;
+  white-space: nowrap;
 }
 
-.textura-faixa {
-  height: 16px;
-  background-image: url('/faixa-textura.svg');
-  background-repeat: repeat-x;
-  background-position: left center;
-  background-size: auto 16px;
+.etapa.current .etapa-rotulo {
+  color: #10233f;
 }
 
-h1 {
-  font-size: 1.6rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  margin: 0 0 6px;
-  text-wrap: balance;
-  color: var(--ink);
-}
-
-.hero .subtitle {
-  color: var(--ink);
-  opacity: 0.82;
-}
-
-.subtitle {
-  margin: 0;
-  color: var(--ink-soft);
-  font-size: 0.94rem;
-  max-width: 46ch;
+.etapa.done .etapa-rotulo {
+  color: #4b5c77;
 }
 
 .content-col {
   max-width: 620px;
   width: 100%;
-  margin: 0 auto;
+  margin: 28px auto 0;
+  padding: 0 32px 56px;
   display: flex;
   flex-direction: column;
   gap: 18px;
 }
 
-.stepper {
-  display: flex;
-  gap: 6px;
-}
-
-.stepper .tick {
-  flex: 1;
-  height: 4px;
-  border-radius: 3px;
-  background: var(--line);
-  position: relative;
-  overflow: hidden;
-}
-
-.stepper .tick::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: var(--brand);
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 0.35s ease;
-}
-
-.stepper .tick.done::after,
-.stepper .tick.current::after {
-  transform: scaleX(1);
-}
-
-.step-labels {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.68rem;
-  color: var(--ink-faint);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-weight: 700;
-}
-
-.step-labels span.active {
-  color: var(--brand);
+@media (max-width: 640px) {
+  .header-inner {
+    padding: 14px 20px;
+    gap: 12px;
+  }
+  .header-logo {
+    height: 40px;
+  }
+  .hero-inner {
+    padding: 30px 20px 36px;
+  }
+  .hero-title {
+    font-size: 30px;
+  }
+  .container {
+    padding: 0 20px;
+  }
+  .content-col {
+    padding: 0 20px 56px;
+  }
+  .etapa-rotulo {
+    font-size: 11px;
+  }
 }
 
 .card {

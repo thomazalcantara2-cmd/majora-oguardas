@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 
 const STEPS = ['search', 'password', 'data', 'success'];
-const STEP_LABELS = { search: 'CPF', password: 'Senha', data: 'Resposta', success: 'Concluído' };
+const GRUPO_DA_ETAPA = { search: 0, password: 0, data: 1, success: 2 };
+const GRUPOS = ['Identificação', 'Manifestação', 'Protocolo'];
 const TAMANHO_MAXIMO_TEXTO = 8000;
 
 export default function Page() {
@@ -131,51 +132,57 @@ export default function Page() {
     }
   }
 
-  const stepIndex = STEPS.indexOf(step);
+  const grupoAtual = GRUPO_DA_ETAPA[step];
 
   return (
-    <div className="shell">
-      <header>
-        <div className="org-row">
-          <div className="org-text">
-            <p className="org-line1">Prefeitura Municipal do Jaboatão dos Guararapes</p>
-            <p className="org-line2">
-              Secretaria Municipal de Administração, Governo Digital e Inovação — Secretaria Executiva de Gestão de
-              Pessoas
-            </p>
+    <div className="page-shell">
+      <div className="textura-faixa" aria-hidden="true" />
+
+      <header className="site-header">
+        <div className="header-inner">
+          <img src="/logo-pmjg.png" alt="Jaboatão dos Guararapes" className="header-logo" />
+          <span className="header-divider" aria-hidden="true" />
+          <div className="header-text">
+            <p className="header-overline">Prefeitura do Jaboatão dos Guararapes</p>
+            <p className="header-title">Secretaria Executiva de Gestão de Pessoas</p>
           </div>
-          <img src="/logo-pmjg.png" alt="Jaboatão dos Guararapes" className="org-logo" />
-        </div>
-        <div className="hero">
-          <div className="stripe-meta">
-            <span className="stripe stripe-amarela" />
-            <span className="stripe stripe-verde" />
-            <span className="stripe-label">Guarda Municipal · Majoração de jornada</span>
-          </div>
-          <h1>Resposta à manifestação e recurso</h1>
-          <p className="subtitle">
-            Consulte a resposta à sua manifestação sobre a classificação prévia da majoração de jornada e, se quiser,
-            apresente recurso.
-          </p>
         </div>
       </header>
 
-      <div className="textura-faixa" aria-hidden="true" />
+      <section className="hero">
+        <div className="hero-inner">
+          <div className="hero-content">
+            <span className="hero-badge">Recurso Administrativo</span>
+            <h1 className="hero-title">
+              Majoração
+              <br />
+              de jornada
+            </h1>
+            <p className="hero-lede">
+              Consulte a resposta à sua manifestação sobre a classificação prévia da majoração de jornada e, se
+              quiser, apresente recurso.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <div className="container">
+        <div className="etapas-card">
+          <div className="etapas-row">
+            {GRUPOS.map((label, i) => (
+              <Fragment key={label}>
+                {i > 0 && <div className={`etapa-linha ${i <= grupoAtual ? 'done' : ''}`} />}
+                <div className={`etapa ${i < grupoAtual ? 'done' : i === grupoAtual ? 'current' : ''}`}>
+                  <div className="etapa-circulo">{i + 1}</div>
+                  <div className="etapa-rotulo">{label}</div>
+                </div>
+              </Fragment>
+            ))}
+          </div>
+        </div>
+      </div>
 
       <div className="content-col">
-        <div className="stepper">
-          {STEPS.map((s, i) => (
-            <div key={s} className={`tick ${i < stepIndex ? 'done' : ''} ${i === stepIndex ? 'current' : ''}`} />
-          ))}
-        </div>
-        <div className="step-labels">
-          {STEPS.map((s, i) => (
-            <span key={s} className={i <= stepIndex ? 'active' : ''}>
-              {STEP_LABELS[s]}
-            </span>
-          ))}
-        </div>
-
         <main style={{ position: 'relative' }}>
         {step === 'search' && (
           <section className="card">
