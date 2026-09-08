@@ -65,7 +65,9 @@ function doPost(e) {
         registrarEvento_(payload.matricula, payload.tipo);
         return responderJson_({ ok: true });
       case 'salvarPdfRecurso':
-        return responderJson_({ ok: true, url: salvarPdfRecurso_(payload.nomeArquivo, payload.base64) });
+        return responderJson_({ ok: true, url: salvarPdfRecurso_(payload.nome, payload.base64) });
+      case 'obterLinkResposta':
+        return responderJson_({ ok: true, url: obterLinkResposta_(payload.nome) });
       default:
         return responderJson_({ ok: false, erro: 'Ação desconhecida: ' + payload.acao });
     }
@@ -135,38 +137,75 @@ function registrarEvento_(matricula, tipo) {
   aba.appendRow([new Date(), matricula, tipo]);
 }
 
-// ===================== ARQUIVOS (RECURSO EM PDF) =====================
+// ===================== ARQUIVOS (PASTA DE CADA SERVIDOR) =====================
 
 /**
- * Pasta onde os PDFs de recurso são salvos. Criada automaticamente na
- * primeira vez (mesma pasta-mãe da planilha), e o ID fica guardado nas
- * Propriedades do Script — não precisa configurar nada manualmente.
+ * A pasta-mãe onde ficam as subpastas de cada servidor (mesma pasta onde
+ * está a planilha) — ex: ".../MANIFESTAÇÕES - SERVIDORES/JOSUEL GONZAGA DOS
+ * SANTOS/". Cada servidor já tem sua própria subpasta, com o nome exatamente
+ * igual ao da coluna NOME.
  */
-function getPastaRecursos_() {
-  var props = PropertiesService.getScriptProperties();
-  var id = props.getProperty('PASTA_RECURSOS_ID');
-  if (id) {
-    try {
-      return DriveApp.getFolderById(id);
-    } catch (err) {
-      // Pasta foi apagada ou o ID ficou inválido — recria abaixo.
-    }
-  }
-
+function getPastaMae_() {
   var arquivoDaPlanilha = DriveApp.getFileById(SpreadsheetApp.getActiveSpreadsheet().getId());
   var pais = arquivoDaPlanilha.getParents();
-  var pastaMae = pais.hasNext() ? pais.next() : DriveApp.getRootFolder();
-  var pasta = pastaMae.createFolder('Recursos (PDFs gerados pelo app)');
-  props.setProperty('PASTA_RECURSOS_ID', pasta.getId());
-  return pasta;
+  return pais.hasNext() ? pais.next() : DriveApp.getRootFolder();
 }
 
-/** Recebe um PDF em base64, salva na pasta de recursos e devolve a URL. */
-function salvarPdfRecurso_(nomeArquivo, base64) {
+function getPastaServidor_(nome) {
+  var subpastas = getPastaMae_().getFoldersByName(nome);
+  if (!subpastas.hasNext()) {
+    throw new Error('Não encontrei a pasta do servidor "' + nome + '" (o nome da subpasta precisa ser idêntico ao da coluna NOME).');
+  }
+  return subpastas.next();
+}
+
+/** Acha, dentro de uma pasta, o primeiro PDF cujo nome contém um termo
+ * (sem diferenciar maiúsculas/minúsculas). Devolve null se não achar. */
+function localizarPdfNaPasta_(pasta, termo) {
+  var termoNormalizado = termo.toUpperCase();
+  var arquivos = pasta.getFilesByType(MimeType.PDF);
+  var maisRecente = null;
+  while (arquivos.hasNext()) {
+    var arquivo = arquivos.next();
+    if (arquivo.getName().toUpperCase().indexOf(termoNormalizado) !== -1) {
+      if (!maisRecente || arquivo.getLastUpdated() > maisRecente.getLastUpdated()) {
+        maisRecente = arquivo;
+      }
+    }
+  }
+  return maisRecente;
+}
+
+/**
+ * Procura, na pasta do servidor, o PDF da resposta (Minuta de Voto —
+ * convertida manualmente de .docx para PDF e deixada na mesma pasta).
+ * Devolve '' se ainda não existir (o app do Vercel cai para o PDF
+ * empacotado no próprio código, como plano B).
+ */
+function obterLinkResposta_(nome) {
+  var pasta = getPastaServidor_(nome);
+  var arquivo = localizarPdfNaPasta_(pasta, 'MINUTA');
+  if (!arquivo) return '';
+  arquivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return arquivo.getUrl();
+}
+
+/**
+ * Recebe o PDF do recurso (base64) e salva na pasta do próprio servidor,
+ * no mesmo padrão de nome usado para o Requerimento original
+ * ("RECURSO_<NOME>_<DD-MM-AAAA>_<HH-MM>.pdf"). Devolve a URL do arquivo.
+ */
+function salvarPdfRecurso_(nome, base64) {
   if (!base64) throw new Error('PDF vazio.');
+  var pasta = getPastaServidor_(nome);
+
+  var agora = new Date();
+  var carimbo = Utilities.formatDate(agora, Session.getScriptTimeZone() || 'America/Recife', 'dd-MM-yyyy_HH-mm');
+  var nomeArquivo = 'RECURSO_' + nome + '_' + carimbo + '.pdf';
+
   var bytes = Utilities.base64Decode(base64);
-  var blob = Utilities.newBlob(bytes, 'application/pdf', nomeArquivo || 'recurso.pdf');
-  var arquivo = getPastaRecursos_().createFile(blob);
+  var blob = Utilities.newBlob(bytes, 'application/pdf', nomeArquivo);
+  var arquivo = pasta.createFile(blob);
   arquivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   return arquivo.getUrl();
 }

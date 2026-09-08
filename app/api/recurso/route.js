@@ -49,17 +49,17 @@ export async function POST(request) {
   const pdfBuffer = await gerarPdfRecurso({
     nome: servidor.nome,
     matricula: servidor.matricula,
+    cpf: servidor.cpf,
     classe: servidor.classe,
     status: servidor.status,
     texto,
     dataHora
   });
 
-  const nomeArquivo = `${servidor.matricula_key}_${Date.now()}.pdf`;
   const recursoPdfUrl = await registrarRecurso({
     id: servidor.id,
     matricula: servidor.matricula,
-    nomeArquivo,
+    nome: servidor.nome,
     bufferPdf: pdfBuffer
   });
 

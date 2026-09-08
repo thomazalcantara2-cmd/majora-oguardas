@@ -4,6 +4,7 @@ import {
   registrarTentativaFalha,
   zerarTentativas,
   registrarAcessoResposta,
+  obterLinkResposta,
   MAX_TENTATIVAS,
   normalizarCpf,
   somenteDigitos
@@ -60,6 +61,7 @@ export async function POST(request) {
   await zerarTentativas(id);
   await registrarAcessoResposta(servidor.matricula);
   const token = await emitirToken(id);
+  const respostaUrl = await obterLinkResposta(servidor.nome, servidor.matricula_key);
 
   return NextResponse.json({
     ok: true,
@@ -69,7 +71,7 @@ export async function POST(request) {
       nome: servidor.nome,
       classe: servidor.classe || '',
       status: servidor.status,
-      respostaUrl: `/respostas/${servidor.matricula_key}.pdf`,
+      respostaUrl,
       recursoJaEnviado: Boolean(servidor.recurso_pdf_url),
       dataRecurso: servidor.data_recurso ? formatarData(servidor.data_recurso, true) : '',
       recursoPdfUrl: servidor.recurso_pdf_url || ''

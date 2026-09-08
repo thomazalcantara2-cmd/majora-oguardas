@@ -18,8 +18,8 @@ recurso.
 |---|---|
 | Framework | Next.js (App Router), hospedado no Vercel |
 | Banco de dados | A própria Planilha Google — lida/escrita através de um Web App do Apps Script |
-| Resposta (Minuta de Voto) | Arquivo estático em `public/respostas/<matricula_key>.pdf` — não depende da planilha nem de armazenamento externo |
-| Recurso (gerado pelo servidor) | PDF gerado em tempo real (`pdfkit`) e salvo numa pasta do Google Drive (via o mesmo Apps Script); o link fica na coluna `Recurso` da planilha |
+| Resposta (Minuta de Voto) | Localizada dinamicamente na pasta do próprio servidor no Drive (arquivo PDF com "MINUTA" no nome); se ainda não existir por lá, cai para o PDF estático em `public/respostas/<matricula_key>.pdf` |
+| Recurso (gerado pelo servidor) | PDF gerado em tempo real (`pdfkit`), no mesmo padrão visual do Requerimento original, e salvo na pasta do próprio servidor no Drive (via o mesmo Apps Script) com o nome `RECURSO_<NOME>_<data>_<hora>.pdf`; o link fica na coluna `Recurso` da planilha |
 | Sessão pós-senha | Token assinado (JWT), sem estado guardado no servidor |
 
 Como o repositório já está conectado ao Vercel, **qualquer push nesta branch
@@ -40,7 +40,7 @@ gera um novo deploy automaticamente**.
 | `lib/pdf.js` | Geração do PDF do recurso (`pdfkit`) |
 | `apps-script/Code.gs` | O Web App em si — cole no editor Apps Script vinculado à planilha |
 | `apps-script/appsscript.json` | Manifesto do projeto Apps Script |
-| `public/respostas/*.pdf` | As 30 respostas (Minuta de Voto), uma por servidor |
+| `public/respostas/*.pdf` | Cópia estática das 30 respostas (Minuta de Voto), usada só como **fallback** quando a pasta do servidor no Drive ainda não tem o PDF da minuta |
 
 ---
 
@@ -52,7 +52,7 @@ Colunas A-K já existem na planilha de origem; L-N são criadas pelo
 | Coluna | Nome | Observações |
 |---|---|---|
 | A | `CPF` | Pode ter perdido zeros à esquerda por estar numa célula numérica — o app sempre normaliza para 11 dígitos. **É por esta coluna que o Apps Script identifica automaticamente a aba certa** (não importa como a aba se chama) |
-| B | `MATR.` | Matrícula como está na planilha (ex: `0.0195308.1`). Só os dígitos formam a `matricula_key`, usada para achar o PDF em `public/respostas/` |
+| B | `MATR.` | Matrícula como está na planilha (ex: `0.0195308.1`). Só os dígitos formam a `matricula_key`, usada para achar o PDF de fallback em `public/respostas/` quando a minuta ainda não está na pasta do Drive |
 | C | `NOME` | Nome completo |
 | D | `CLASSE` | Ex: GM I, GM II, Inspetor, Subinspetor, Subinspetora |
 | E, F | `DATA 1º SOLICITAÇÃO`, `DATA MANIFESTAÇÃO` | Não usadas pelo app |
@@ -97,11 +97,14 @@ seguindo o mesmo padrão que a planilha já usa para a manifestação original
    dela no passo 2.3.
 
 Não é preciso conectar nenhum recurso de Storage no Vercel: os PDFs de
-recurso são salvos direto numa pasta do Google Drive pelo próprio Apps
-Script (`getPastaRecursos_()` em `apps-script/Code.gs`), criada
-automaticamente na primeira vez que alguém envia um recurso, do lado de
-dentro da mesma pasta onde está a planilha. O ID dessa pasta fica guardado
-nas Propriedades do Script — nada a configurar manualmente.
+recurso são salvos direto na **pasta do próprio servidor** no Google Drive,
+pelo mesmo Apps Script. Essas pastas já existem (uma por servidor, dentro da
+mesma pasta-mãe onde está a planilha) e o script as localiza pelo nome —
+**o nome da subpasta precisa ser idêntico ao valor da coluna `NOME`** na
+planilha. É na mesma pasta que a resposta (Minuta de Voto) em PDF deve ser
+colocada pela SEGEP (arquivo com "MINUTA" em algum lugar do nome) para que o
+app passe a oferecer o download dela; enquanto isso não acontecer, o app usa
+o PDF estático de `public/respostas/` como fallback.
 
 ### 2.2 Variáveis de ambiente no Vercel
 
@@ -130,15 +133,20 @@ Se `apps-script/Code.gs` mudar depois da primeira implantação, use
 versão** no editor Apps Script para que a URL já configurada no Vercel passe
 a rodar o código atualizado (a URL em si não muda).
 
-> Se você já tinha implantado uma versão de `Code.gs` **antes** da função
-> `salvarPdfRecurso_`/`getPastaRecursos_` existir (isto é, antes do app
-> passar a salvar o PDF do recurso no Drive em vez do Vercel Blob), precisa:
+> Se você já tinha implantado uma versão de `Code.gs` **antes** das funções
+> `salvarPdfRecurso_`/`getPastaServidor_`/`obterLinkResposta_` existirem
+> (isto é, antes do app passar a ler e salvar PDFs na pasta de cada
+> servidor), precisa:
 > 1. Colar o `Code.gs` atualizado por cima do anterior no editor.
 > 2. Rodar qualquer função pelo editor (ex: `inicializarPlanilha`) uma vez —
 >    isso vai pedir para autorizar um novo escopo (acesso ao Drive), já que
 >    o código passou a usar `DriveApp`.
 > 3. Criar uma **Nova versão** da implantação (passo acima), para a URL
 >    existente passar a rodar esse código.
+>
+> Isso vale também para a versão mais recente do `Code.gs` (busca da minuta
+> e gravação do recurso na pasta do próprio servidor, em vez de uma pasta
+> única `Recursos`) — repita os 3 passos acima sempre que o arquivo mudar.
 
 ### 2.5 Se você já tinha configurado o Vercel Blob numa tentativa anterior
 
@@ -157,16 +165,21 @@ Não tem problema deixá-lo conectado também, só fica sem uso.
    tentativas erradas bloqueiam o registro por 15 minutos (gravado nas
    colunas M/N pelo Apps Script). Em caso de sucesso, emite um token de
    sessão (JWT, 15 min) e retorna nome, matrícula, classe, status e o link
-   da resposta em PDF (`/respostas/<matricula_key>.pdf`, arquivo estático).
+   da resposta em PDF — o Apps Script procura primeiro um PDF com "MINUTA"
+   no nome dentro da pasta do servidor no Drive; se não achar, o Next.js
+   usa o arquivo estático `/respostas/<matricula_key>.pdf` como fallback.
 3. **Sua manifestação**: mostra a decisão (`Deferido`/`Indeferido`) e um
    botão para baixar a resposta completa. Se um recurso já tiver sido
    enviado antes (coluna `Recurso` preenchida), mostra a data e o link para
    baixá-lo, com a opção de enviar um novo (substitui o anterior).
 4. **Recurso** (`POST /api/recurso`): o texto digitado é transformado em PDF
-   (`lib/pdf.js`) e enviado ao Apps Script em base64, que salva o arquivo
-   numa pasta do Drive (criada automaticamente) e devolve a URL; essa URL e
-   a data são gravadas nas colunas `Recurso`/`Data_Recurso`, e uma linha é
-   adicionada à aba `Log_Eventos`.
+   (`lib/pdf.js`, no mesmo layout institucional do Requerimento original —
+   cabeçalho, identificação do recorrente com CPF completo, fundamentos,
+   declaração e assinatura eletrônica) e enviado ao Apps Script em base64,
+   que salva o arquivo na pasta do próprio servidor no Drive com o nome
+   `RECURSO_<NOME>_<data>_<hora>.pdf` e devolve a URL; essa URL e a data são
+   gravadas nas colunas `Recurso`/`Data_Recurso`, e uma linha é adicionada à
+   aba `Log_Eventos`.
 5. **Tela final**: confirma o registro com data/hora e link para baixar o
    recurso gerado.
 
@@ -199,16 +212,22 @@ autenticação forte). Pontos específicos desta fase:
 - **Recurso em PDF (Google Drive)**: o arquivo é salvo com compartilhamento
   "qualquer pessoa com o link pode visualizar" — mesmo modelo de exposição
   (URL longa e imprevisível, sem autenticação adicional para quem já tem o
-  link). A pasta em si (`Recursos (PDFs gerados pelo app)`) fica dentro da
-  mesma pasta da planilha no Drive, então herda quem já tem acesso a essa
-  área — mas os arquivos individuais, por padrão, são acessíveis a qualquer
-  um com o link direto, não só a quem já tinha acesso à pasta.
+  link). Não existe mais uma pasta única de recursos: o PDF é salvo direto
+  na **pasta que já existe para aquele servidor** (a mesma onde está a
+  Minuta de Voto dele), então herda o compartilhamento que essa pasta já
+  tiver — mas o arquivo individual, por padrão, também fica acessível a
+  qualquer um com o link direto, não só a quem já tinha acesso à pasta.
 - **O texto do recurso não fica na planilha** — só o link do PDF gerado.
 - **A conta que implanta o Web App do Apps Script passa a poder criar/ler
   arquivos no Drive dela** (escopo `drive` adicionado quando o app passou a
-  salvar os PDFs de recurso). Isso é esperado — é a mesma conta que já tem
-  acesso à planilha e à pasta de origem — mas vale saber que o script pode,
-  tecnicamente, acessar outros arquivos dessa conta também.
+  ler/salvar PDFs nas pastas dos servidores). Isso é esperado — é a mesma
+  conta que já tem acesso à planilha e às pastas de origem — mas vale saber
+  que o script pode, tecnicamente, acessar outros arquivos dessa conta
+  também.
+- **Nome da subpasta precisa bater exatamente com a coluna `NOME`.** Se a
+  SEGEP renomear uma pasta de servidor ou o nome na planilha for digitado
+  de forma diferente do nome da pasta, a busca pela minuta e a gravação do
+  recurso falham (o Apps Script devolve um erro específico avisando isso).
 
 ---
 
@@ -237,10 +256,12 @@ de produção do Apps Script.
   ocioso pode ter um "cold start" de alguns segundos). Para 30 usuários
   acessando esporadicamente, isso não chega a ser um problema.
 - **Sem limite global de consultas por CPF/minuto** — ver seção 4.
-- As respostas em PDF (`public/respostas/`) são um retrato estático do
-  momento em que foram exportadas dos `Minuta_Voto_*.docx` do Drive. Se a
-  SEGEP corrigir uma Minuta de Voto depois, o PDF correspondente precisa ser
-  substituído manualmente (sem sincronização automática com o Drive).
+- As respostas em PDF de `public/respostas/` são apenas um **fallback**: um
+  retrato estático do momento em que foram exportadas dos
+  `Minuta_Voto_*.docx` do Drive. Assim que a SEGEP colocar o PDF da minuta
+  (com "MINUTA" no nome do arquivo) na pasta do próprio servidor no Drive, o
+  app passa a usar esse arquivo automaticamente — não precisa mexer no
+  código nem nesta pasta estática.
 - `public/respostas/01277011.pdf` (Ubirajara Gomes da Fonseca) é uma
   exceção: o `.docx` original tem 12,3MB (provavelmente por imagens
   digitalizadas em alta resolução) e não pôde ser baixado diretamente. O
