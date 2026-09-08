@@ -197,6 +197,15 @@ npm run dev                   # http://localhost:3000
   corrigir uma Minuta de Voto depois, é preciso substituir o PDF
   correspondente manualmente (não há sincronização automática com o Drive —
   ver seção 1).
+- `public/respostas/01277011.pdf` (Ubirajara Gomes da Fonseca) é uma exceção:
+  o `.docx` original tem 12,3MB (provavelmente por imagens digitalizadas em
+  alta resolução) e não pôde ser baixado diretamente. O conteúdo foi
+  conferido e está completo (relatório, fundamentação, conclusão, data e
+  assinaturas), mas o PDF foi reconstruído a partir do texto — a tabela
+  "DADOS DO PROCESSO" no topo quebra linha de forma um pouco estranha
+  (cosmético, não afeta a informação). Se formatação pixel-a-pixel importar
+  para esse caso específico, vale gerar esse PDF manualmente a partir do
+  `.docx` original.
 - Assim como a fase anterior, não existe hoje uma tela autenticada para a
   SEGEP consultar recursos recebidos — o acesso é direto pelo SQL Editor da
   Neon e pelo painel do Vercel Blob.
