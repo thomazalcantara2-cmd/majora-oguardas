@@ -136,7 +136,21 @@ export default function Page() {
   return (
     <div className="shell">
       <header>
-        <p className="eyebrow">SEGEP · Guarda Municipal de Jaboatão dos Guararapes</p>
+        <div className="org-row">
+          <div className="org-text">
+            <p className="org-line1">Prefeitura Municipal do Jaboatão dos Guararapes</p>
+            <p className="org-line2">
+              Secretaria Municipal de Administração, Governo Digital e Inovação — Secretaria Executiva de Gestão de
+              Pessoas
+            </p>
+          </div>
+          <img src="/logo-pmjg.png" alt="Jaboatão dos Guararapes" className="org-logo" />
+        </div>
+        <div className="stripe-meta">
+          <span className="stripe stripe-amarela" />
+          <span className="stripe stripe-verde" />
+          <span className="stripe-label">Guarda Municipal · Majoração de jornada</span>
+        </div>
         <h1>Resposta à manifestação e recurso</h1>
         <p className="subtitle">
           Consulte a resposta à sua manifestação sobre a classificação prévia da majoração de jornada e, se quiser,

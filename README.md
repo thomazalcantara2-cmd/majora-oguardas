@@ -37,9 +37,11 @@ gera um novo deploy automaticamente**.
 | `lib/sheets.js` | Cliente HTTP do Web App do Apps Script |
 | `lib/db.js` | Camada fina sobre `lib/sheets.js` com os nomes de função que as rotas usam |
 | `lib/session.js` | Emissão/verificação do token de sessão (JWT) |
-| `lib/pdf.js` | Geração do PDF do recurso (`pdfkit`) |
+| `lib/pdf.js` | Geração do PDF do recurso (`pdfkit`), no mesmo padrão visual do Requerimento/Manifestação original da SEGEP |
+| `lib/logoBase64.js` | Brasão da Prefeitura em base64, embutido no PDF do recurso (evita depender de um arquivo externo no bundle serverless) |
 | `apps-script/Code.gs` | O Web App em si — cole no editor Apps Script vinculado à planilha |
 | `apps-script/appsscript.json` | Manifesto do projeto Apps Script |
+| `public/logo-pmjg.png` | Mesmo brasão da Prefeitura, usado no cabeçalho da página web |
 | `public/respostas/*.pdf` | Cópia estática das 30 respostas (Minuta de Voto), usada só como **fallback** quando a pasta do servidor no Drive ainda não tem o PDF da minuta |
 
 ---
@@ -278,3 +280,10 @@ de produção do Apps Script.
   incluídos no bundle serverless — nesse caso, adicionar
   `outputFileTracingIncludes` no `next.config.mjs` apontando para
   `node_modules/pdfkit/js/standard-fonts/**` resolve.
+- **Identidade visual**: tanto a página web quanto o PDF do recurso seguem o
+  mesmo padrão visual do Requerimento/Manifestação original da SEGEP (brasão
+  da Prefeitura, azul institucional `#0A3CC8`, tarjas amarelo/verde) —
+  reconstruído a partir do HTML/CSS que o processo anterior usava para gerar
+  esses documentos (não é um clone pixel a pixel, já que o PDF do recurso é
+  desenhado com `pdfkit` em vez de HTML→PDF, mas usa as mesmas cores,
+  brasão, estrutura de seções e campos rotulados).
