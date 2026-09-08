@@ -64,6 +64,8 @@ function doPost(e) {
       case 'registrarEvento':
         registrarEvento_(payload.matricula, payload.tipo);
         return responderJson_({ ok: true });
+      case 'salvarPdfRecurso':
+        return responderJson_({ ok: true, url: salvarPdfRecurso_(payload.nomeArquivo, payload.base64) });
       default:
         return responderJson_({ ok: false, erro: 'Ação desconhecida: ' + payload.acao });
     }
@@ -131,6 +133,42 @@ function registrarEvento_(matricula, tipo) {
     aba.appendRow(['Timestamp', 'Matrícula', 'Tipo']);
   }
   aba.appendRow([new Date(), matricula, tipo]);
+}
+
+// ===================== ARQUIVOS (RECURSO EM PDF) =====================
+
+/**
+ * Pasta onde os PDFs de recurso são salvos. Criada automaticamente na
+ * primeira vez (mesma pasta-mãe da planilha), e o ID fica guardado nas
+ * Propriedades do Script — não precisa configurar nada manualmente.
+ */
+function getPastaRecursos_() {
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty('PASTA_RECURSOS_ID');
+  if (id) {
+    try {
+      return DriveApp.getFolderById(id);
+    } catch (err) {
+      // Pasta foi apagada ou o ID ficou inválido — recria abaixo.
+    }
+  }
+
+  var arquivoDaPlanilha = DriveApp.getFileById(SpreadsheetApp.getActiveSpreadsheet().getId());
+  var pais = arquivoDaPlanilha.getParents();
+  var pastaMae = pais.hasNext() ? pais.next() : DriveApp.getRootFolder();
+  var pasta = pastaMae.createFolder('Recursos (PDFs gerados pelo app)');
+  props.setProperty('PASTA_RECURSOS_ID', pasta.getId());
+  return pasta;
+}
+
+/** Recebe um PDF em base64, salva na pasta de recursos e devolve a URL. */
+function salvarPdfRecurso_(nomeArquivo, base64) {
+  if (!base64) throw new Error('PDF vazio.');
+  var bytes = Utilities.base64Decode(base64);
+  var blob = Utilities.newBlob(bytes, 'application/pdf', nomeArquivo || 'recurso.pdf');
+  var arquivo = getPastaRecursos_().createFile(blob);
+  arquivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return arquivo.getUrl();
 }
 
 // ===================== SETUP (rodar pelo editor, uma vez cada) =====================

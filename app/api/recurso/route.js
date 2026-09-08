@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { put } from '@vercel/blob';
 import { obterServidorPorId, registrarRecurso } from '../../../lib/db';
 import { verificarToken } from '../../../lib/session';
 import { formatarData } from '../../../lib/format';
@@ -56,22 +55,17 @@ export async function POST(request) {
     dataHora
   });
 
-  const caminho = `recursos/${servidor.matricula_key}_${Date.now()}.pdf`;
-  const resultado = await put(caminho, pdfBuffer, {
-    access: 'public',
-    addRandomSuffix: true,
-    contentType: 'application/pdf'
-  });
-
-  await registrarRecurso({
+  const nomeArquivo = `${servidor.matricula_key}_${Date.now()}.pdf`;
+  const recursoPdfUrl = await registrarRecurso({
     id: servidor.id,
     matricula: servidor.matricula,
-    pdfUrl: resultado.url
+    nomeArquivo,
+    bufferPdf: pdfBuffer
   });
 
   return NextResponse.json({
     ok: true,
     timestamp: dataHora,
-    recursoPdfUrl: resultado.url
+    recursoPdfUrl
   });
 }

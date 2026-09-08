@@ -19,7 +19,7 @@ recurso.
 | Framework | Next.js (App Router), hospedado no Vercel |
 | Banco de dados | A própria Planilha Google — lida/escrita através de um Web App do Apps Script |
 | Resposta (Minuta de Voto) | Arquivo estático em `public/respostas/<matricula_key>.pdf` — não depende da planilha nem de armazenamento externo |
-| Recurso (gerado pelo servidor) | PDF gerado em tempo real (`pdfkit`) e enviado ao Vercel Blob; o link fica na coluna `Recurso` da planilha |
+| Recurso (gerado pelo servidor) | PDF gerado em tempo real (`pdfkit`) e salvo numa pasta do Google Drive (via o mesmo Apps Script); o link fica na coluna `Recurso` da planilha |
 | Sessão pós-senha | Token assinado (JWT), sem estado guardado no servidor |
 
 Como o repositório já está conectado ao Vercel, **qualquer push nesta branch
@@ -96,13 +96,14 @@ seguindo o mesmo padrão que a planilha já usa para a manifestação original
 7. Copie a **URL do app da Web** gerada (termina em `/exec`) — vai precisar
    dela no passo 2.3.
 
-### 2.2 Conectar o Vercel Blob (para os PDFs de recurso)
+Não é preciso conectar nenhum recurso de Storage no Vercel: os PDFs de
+recurso são salvos direto numa pasta do Google Drive pelo próprio Apps
+Script (`getPastaRecursos_()` em `apps-script/Code.gs`), criada
+automaticamente na primeira vez que alguém envia um recurso, do lado de
+dentro da mesma pasta onde está a planilha. O ID dessa pasta fica guardado
+nas Propriedades do Script — nada a configurar manualmente.
 
-Aba **Storage** do projeto no Vercel → **Create Database → Blob** → conectar
-ao projeto. Sem configuração adicional — injeta `BLOB_READ_WRITE_TOKEN`
-automaticamente.
-
-### 2.3 Variáveis de ambiente no Vercel
+### 2.2 Variáveis de ambiente no Vercel
 
 Aba **Settings → Environment Variables** do projeto `majora-oguardas`:
 
@@ -115,19 +116,35 @@ Aba **Settings → Environment Variables** do projeto `majora-oguardas`:
 Marque todas para Production e Preview, e redeploy (ou aguarde o próximo
 push) para valerem.
 
-### 2.4 Deploy
+### 2.3 Deploy
 
 Sem passo manual além do acima: cada push nesta branch gera um deploy novo.
 Depois de configurar as variáveis, a próxima visita a
 `https://majora-oguardas.vercel.app` já funciona com dados reais — os 30
 registros já estão na planilha, não há "importação" a fazer.
 
-### 2.5 Atualizações futuras do Apps Script
+### 2.4 Atualizações futuras do Apps Script
 
 Se `apps-script/Code.gs` mudar depois da primeira implantação, use
 **Implantar → Gerenciar implantações → editar (ícone de lápis) → Nova
 versão** no editor Apps Script para que a URL já configurada no Vercel passe
 a rodar o código atualizado (a URL em si não muda).
+
+> Se você já tinha implantado uma versão de `Code.gs` **antes** da função
+> `salvarPdfRecurso_`/`getPastaRecursos_` existir (isto é, antes do app
+> passar a salvar o PDF do recurso no Drive em vez do Vercel Blob), precisa:
+> 1. Colar o `Code.gs` atualizado por cima do anterior no editor.
+> 2. Rodar qualquer função pelo editor (ex: `inicializarPlanilha`) uma vez —
+>    isso vai pedir para autorizar um novo escopo (acesso ao Drive), já que
+>    o código passou a usar `DriveApp`.
+> 3. Criar uma **Nova versão** da implantação (passo acima), para a URL
+>    existente passar a rodar esse código.
+
+### 2.5 Se você já tinha configurado o Vercel Blob numa tentativa anterior
+
+Pode remover a variável `BLOB_READ_WRITE_TOKEN` e desconectar o Blob Store
+(aba **Storage** do projeto → o banco Blob → **Remove**) — não é mais usado.
+Não tem problema deixá-lo conectado também, só fica sem uso.
 
 ---
 
@@ -146,9 +163,10 @@ a rodar o código atualizado (a URL em si não muda).
    enviado antes (coluna `Recurso` preenchida), mostra a data e o link para
    baixá-lo, com a opção de enviar um novo (substitui o anterior).
 4. **Recurso** (`POST /api/recurso`): o texto digitado é transformado em PDF
-   (`lib/pdf.js`) e enviado ao Vercel Blob; o Next.js pede ao Apps Script
-   para gravar o link e a data nas colunas `Recurso`/`Data_Recurso`, e uma
-   linha é adicionada à aba `Log_Eventos`.
+   (`lib/pdf.js`) e enviado ao Apps Script em base64, que salva o arquivo
+   numa pasta do Drive (criada automaticamente) e devolve a URL; essa URL e
+   a data são gravadas nas colunas `Recurso`/`Data_Recurso`, e uma linha é
+   adicionada à aba `Log_Eventos`.
 5. **Tela final**: confirma o registro com data/hora e link para baixar o
    recurso gerado.
 
@@ -178,9 +196,19 @@ autenticação forte). Pontos específicos desta fase:
 - **Resposta em PDF como arquivo estático**: a URL não é adivinhável a
   partir da interface, mas também não exige autenticação para quem já tiver
   o link exato.
-- **Recurso em PDF (Blob público)**: mesmo modelo — URL aleatória e
-  imprevisível, não protegida por autenticação adicional.
+- **Recurso em PDF (Google Drive)**: o arquivo é salvo com compartilhamento
+  "qualquer pessoa com o link pode visualizar" — mesmo modelo de exposição
+  (URL longa e imprevisível, sem autenticação adicional para quem já tem o
+  link). A pasta em si (`Recursos (PDFs gerados pelo app)`) fica dentro da
+  mesma pasta da planilha no Drive, então herda quem já tem acesso a essa
+  área — mas os arquivos individuais, por padrão, são acessíveis a qualquer
+  um com o link direto, não só a quem já tinha acesso à pasta.
 - **O texto do recurso não fica na planilha** — só o link do PDF gerado.
+- **A conta que implanta o Web App do Apps Script passa a poder criar/ler
+  arquivos no Drive dela** (escopo `drive` adicionado quando o app passou a
+  salvar os PDFs de recurso). Isso é esperado — é a mesma conta que já tem
+  acesso à planilha e à pasta de origem — mas vale saber que o script pode,
+  tecnicamente, acessar outros arquivos dessa conta também.
 
 ---
 
@@ -188,7 +216,7 @@ autenticação forte). Pontos específicos desta fase:
 
 ```bash
 npm install
-cp .env.example .env.local   # preencha APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN, BLOB_READ_WRITE_TOKEN, SESSION_SECRET
+cp .env.example .env.local   # preencha APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN, SESSION_SECRET
 npm run dev                   # http://localhost:3000
 ```
 
