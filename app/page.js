@@ -1,17 +1,10 @@
 'use client';
 
-import { useState, useRef } from 'react';
-
-const MAX_ANEXO_BYTES = 10 * 1024 * 1024;
-const MIME_PERMITIDOS = [
-  'application/pdf',
-  'image/jpeg',
-  'image/png',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-];
+import { useState } from 'react';
 
 const STEPS = ['search', 'password', 'data', 'success'];
-const STEP_LABELS = { search: 'CPF', password: 'Senha', data: 'Dados', success: 'Concluído' };
+const STEP_LABELS = { search: 'CPF', password: 'Senha', data: 'Resposta', success: 'Concluído' };
+const TAMANHO_MAXIMO_TEXTO = 8000;
 
 export default function Page() {
   const [step, setStep] = useState('search');
@@ -28,12 +21,10 @@ export default function Page() {
   const [token, setToken] = useState(null);
   const [dados, setDados] = useState(null);
 
-  const [requerimentoTexto, setRequerimentoTexto] = useState('');
-  const [anexoError, setAnexoError] = useState('');
+  const [recursoTexto, setRecursoTexto] = useState('');
+  const [editandoRecurso, setEditandoRecurso] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [successInfo, setSuccessInfo] = useState(null);
-
-  const anexoInputRef = useRef(null);
 
   function irParaEtapa(novaEtapa) {
     setStep(novaEtapa);
@@ -92,10 +83,9 @@ export default function Page() {
       }
       setToken(json.token);
       setDados(json.dados);
-      setRequerimentoTexto('');
-      if (anexoInputRef.current) anexoInputRef.current.value = '';
+      setRecursoTexto('');
+      setEditandoRecurso(!json.dados.recursoJaEnviado);
       setSubmitError('');
-      setAnexoError('');
       irParaEtapa('data');
     } catch (err) {
       setPasswordError('Erro ao validar. Tente novamente.');
@@ -104,42 +94,29 @@ export default function Page() {
     }
   }
 
-  function onAnexoChange(e) {
-    setAnexoError('');
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-    if (MIME_PERMITIDOS.indexOf(file.type) === -1) {
-      setAnexoError('Tipo de arquivo não permitido. Envie PDF, JPG, PNG ou DOCX.');
-      e.target.value = '';
+  async function enviarRecurso() {
+    setSubmitError('');
+    const texto = recursoTexto.trim();
+    if (!texto) {
+      setSubmitError('Escreva o texto do recurso antes de enviar.');
       return;
     }
-    if (file.size > MAX_ANEXO_BYTES) {
-      setAnexoError('Arquivo excede o tamanho máximo permitido (10MB).');
-      e.target.value = '';
+    if (texto.length > TAMANHO_MAXIMO_TEXTO) {
+      setSubmitError(`O texto excede o tamanho máximo permitido (${TAMANHO_MAXIMO_TEXTO} caracteres).`);
+      return;
     }
-  }
-
-  async function enviar() {
-    setSubmitError('');
     if (!token) {
       setSubmitError('Sessão expirada. Refaça a identificação por CPF e a validação de senha.');
       return;
     }
 
-    const file = anexoInputRef.current && anexoInputRef.current.files[0];
-    if (file && (MIME_PERMITIDOS.indexOf(file.type) === -1 || file.size > MAX_ANEXO_BYTES)) {
-      setSubmitError('Verifique o arquivo anexado antes de continuar.');
-      return;
-    }
-
     setLoading(true);
     try {
-      const formData = new FormData();
-      formData.set('token', token);
-      formData.set('requerimentoTexto', requerimentoTexto);
-      if (file) formData.set('anexo', file);
-
-      const resp = await fetch('/api/confirmar', { method: 'POST', body: formData });
+      const resp = await fetch('/api/recurso', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, texto })
+      });
       const json = await resp.json();
       if (!json.ok) {
         setSubmitError(json.message || 'Não foi possível registrar. Tente novamente.');
@@ -160,9 +137,10 @@ export default function Page() {
     <div className="shell">
       <header>
         <p className="eyebrow">SEGEP · Guarda Municipal de Jaboatão dos Guararapes</p>
-        <h1>Confirmação de dados — Majoração de jornada 40h</h1>
+        <h1>Resposta à manifestação e recurso</h1>
         <p className="subtitle">
-          Confira os dados do seu requerimento de majoração de jornada semanal de 30h para 40h.
+          Consulte a resposta à sua manifestação sobre a classificação prévia da majoração de jornada e, se quiser,
+          apresente recurso.
         </p>
       </header>
 
@@ -249,10 +227,10 @@ export default function Page() {
 
         {step === 'data' && dados && (
           <section className="card">
-            <h2>Seus dados</h2>
-            <p className="lede">Confira os dados abaixo.</p>
+            <h2>Sua manifestação</h2>
+            <p className="lede">Confira abaixo a decisão sobre a sua manifestação e baixe a resposta completa.</p>
 
-            <span className={`pill ${dados.status === 'Confirmado' ? 'pill-confirmed' : 'pill-pending'}`}>
+            <span className={`pill ${dados.status === 'Deferido' ? 'pill-confirmed' : 'pill-denied'}`}>
               {dados.status}
             </span>
 
@@ -262,50 +240,57 @@ export default function Page() {
             <label htmlFor="f-nome">Nome</label>
             <input id="f-nome" type="text" value={dados.nome} disabled readOnly />
 
-            <label htmlFor="f-cpf">CPF</label>
-            <input id="f-cpf" type="text" className="mono" value={dados.cpfMascarado} disabled readOnly />
+            <label htmlFor="f-classe">Classe</label>
+            <input id="f-classe" type="text" value={dados.classe} disabled readOnly />
 
-            <label htmlFor="f-ordem">Ordem</label>
-            <input id="f-ordem" type="text" className="mono" value={dados.ordem} disabled readOnly />
-
-            <label htmlFor="f-data-requerimento">Data/hora do requerimento</label>
-            <input
-              id="f-data-requerimento"
-              type="text"
-              className="mono"
-              value={dados.dataRequerimento}
-              disabled
-              readOnly
-            />
+            <a
+              href={dados.respostaUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-primary"
+              style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}
+            >
+              Baixar minha resposta (PDF)
+            </a>
 
             <hr className="sep" />
 
-            <h2 style={{ marginBottom: 2 }}>Requerimento</h2>
-            <p className="lede">Espaço livre para justificativa, observação ou pedido relacionado à majoração.</p>
+            <h2 style={{ marginBottom: 2 }}>Recurso</h2>
+            <p className="lede">
+              Se quiser contestar a decisão acima, escreva seu recurso abaixo. O texto é transformado em PDF e
+              enviado à SEGEP para análise.
+            </p>
 
-            <label htmlFor="f-requerimento-texto">Texto do requerimento</label>
-            <textarea
-              id="f-requerimento-texto"
-              maxLength={4000}
-              placeholder="Escreva aqui, se necessário..."
-              value={requerimentoTexto}
-              onChange={(e) => setRequerimentoTexto(e.target.value)}
-            />
-
-            <label htmlFor="f-anexo">Anexo (opcional) — PDF, JPG, PNG ou DOCX, até 10MB</label>
-            <input
-              id="f-anexo"
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png,.docx"
-              ref={anexoInputRef}
-              onChange={onAnexoChange}
-            />
-            {anexoError && <p className="msg msg-error">{anexoError}</p>}
-
-            <button type="button" className="btn btn-primary" onClick={enviar} disabled={loading}>
-              Confirmar dados corretos
-            </button>
-            {submitError && <p className="msg msg-error">{submitError}</p>}
+            {dados.recursoJaEnviado && !editandoRecurso ? (
+              <>
+                <p className="msg" style={{ background: 'var(--brand-soft)', color: 'var(--brand-strong)' }}>
+                  Recurso já apresentado em {dados.dataRecurso}.
+                </p>
+                {dados.recursoPdfUrl && (
+                  <a href={dados.recursoPdfUrl} target="_blank" rel="noreferrer" className="btn btn-primary">
+                    Baixar meu recurso (PDF)
+                  </a>
+                )}
+                <button type="button" className="btn-ghost" style={{ marginTop: 16 }} onClick={() => setEditandoRecurso(true)}>
+                  Enviar um novo recurso (substitui o anterior)
+                </button>
+              </>
+            ) : (
+              <>
+                <label htmlFor="f-recurso-texto">Texto do recurso</label>
+                <textarea
+                  id="f-recurso-texto"
+                  maxLength={TAMANHO_MAXIMO_TEXTO}
+                  placeholder="Escreva aqui o seu recurso..."
+                  value={recursoTexto}
+                  onChange={(e) => setRecursoTexto(e.target.value)}
+                />
+                <button type="button" className="btn btn-primary" onClick={enviarRecurso} disabled={loading}>
+                  Enviar recurso
+                </button>
+                {submitError && <p className="msg msg-error">{submitError}</p>}
+              </>
+            )}
           </section>
         )}
 
@@ -326,12 +311,12 @@ export default function Page() {
                   </svg>
                 </div>
               </div>
-              <h2>Dados confirmados!</h2>
-              <p>Seus dados foram confirmados com sucesso. Registrado em {successInfo.timestamp}.</p>
-              {successInfo.requerimentoRecebido && (
-                <p style={{ color: 'var(--ink-soft)', fontSize: '0.88rem' }}>
-                  Seu requerimento (texto e/ou anexo) também foi recebido e está pendente de análise.
-                </p>
+              <h2>Recurso enviado!</h2>
+              <p>Seu recurso foi registrado com sucesso. Registrado em {successInfo.timestamp}.</p>
+              {successInfo.recursoPdfUrl && (
+                <a href={successInfo.recursoPdfUrl} target="_blank" rel="noreferrer" className="btn btn-primary">
+                  Baixar meu recurso (PDF)
+                </a>
               )}
             </div>
           </section>

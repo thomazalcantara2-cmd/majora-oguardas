@@ -11,9 +11,9 @@
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
     "@vercel/blob": "^2.8.0",
-    "csv-parse": "^5.5.6",
     "jose": "^5.9.6",
     "next": "^16.3.1",
+    "pdfkit": "^0.20.2",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   }

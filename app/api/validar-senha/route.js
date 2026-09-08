@@ -3,6 +3,7 @@ import {
   obterServidorPorId,
   registrarTentativaFalha,
   zerarTentativas,
+  registrarAcessoResposta,
   MAX_TENTATIVAS,
   normalizarCpf
 } from '../../../lib/db';
@@ -56,6 +57,7 @@ export async function POST(request) {
   }
 
   await zerarTentativas(id);
+  await registrarAcessoResposta(servidor.matricula);
   const token = await emitirToken(id);
 
   return NextResponse.json({
@@ -64,11 +66,12 @@ export async function POST(request) {
     dados: {
       matricula: servidor.matricula,
       nome: servidor.nome,
-      cpfMascarado: 'XXX.XXX.XXX-**',
-      ordem: servidor.ordem || '',
-      dataRequerimento: formatarData(servidor.data_requerimento, true),
-      status: servidor.status || 'Pendente',
-      dataConfirmacao: servidor.data_confirmacao ? formatarData(servidor.data_confirmacao) : ''
+      classe: servidor.classe || '',
+      status: servidor.status,
+      respostaUrl: `/respostas/${servidor.matricula_key}.pdf`,
+      recursoJaEnviado: Boolean(servidor.recurso_texto),
+      dataRecurso: servidor.data_recurso ? formatarData(servidor.data_recurso, true) : '',
+      recursoPdfUrl: servidor.recurso_pdf_url || ''
     }
   });
 }

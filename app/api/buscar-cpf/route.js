@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { buscarServidorPorCpf, consultaDentroDoLimiteGlobal, normalizarCpf } from '../../../lib/db';
 
 const MENSAGEM_ERRO_CPF =
-  'Não encontramos esse CPF na base de servidores que requereram a majoração. Verifique os números digitados.';
+  'Não encontramos esse CPF na base de servidores que apresentaram manifestação. Verifique os números digitados.';
 
 export async function POST(request) {
   let body;

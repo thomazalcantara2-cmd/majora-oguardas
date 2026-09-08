@@ -1,14 +1,17 @@
-# Sistema de Confirmação de Dados Cadastrais — Majoração de Jornada 40h
+# Resposta à Manifestação e Recurso — Majoração de Jornada 40h
 
-Aplicação web (Next.js, hospedada no Vercel) para que servidores confirmem os
-próprios dados de requerimento de majoração de jornada semanal de 30h para
-40h, e registrem um requerimento em texto com anexo, se precisarem relatar
-algo.
+Aplicação web (Next.js, hospedada no Vercel) para que os servidores que
+apresentaram manifestação contra a classificação prévia da majoração de
+jornada (30h → 40h) consultem a resposta da SEGEP e, se quiserem, apresentem
+recurso.
 
-> Este projeto já foi implementado como Google Apps Script + Google Sheets
-> numa versão anterior. Esta é a versão que roda no Vercel: banco de dados
-> Postgres (via integração Neon) no lugar da Planilha Google, e Vercel Blob
-> no lugar do Google Drive para os anexos.
+> Esta é a segunda fase do projeto. Na primeira fase, servidores confirmavam
+> dados de requerimento e podiam enviar uma manifestação. Trinta
+> manifestações foram enviadas e analisadas, resultando em 30 decisões
+> (deferido/indeferido) com sua respectiva Minuta de Voto. Esta fase reaproveita
+> a mesma base técnica (Next.js + Postgres/Neon + Vercel Blob), mudando o
+> propósito da página: em vez de confirmar dados, o servidor agora consulta
+> sua resposta e pode apresentar recurso.
 
 ## Arquitetura
 
@@ -16,12 +19,12 @@ algo.
 |---|---|
 | Framework | Next.js (App Router), hospedado no Vercel |
 | Banco de dados | Postgres — integração Neon, conectada pela aba **Storage** do projeto no Vercel |
-| Anexos | Vercel Blob, conectado pela mesma aba **Storage** |
+| Resposta (Minuta de Voto) | Arquivo estático em `public/respostas/<matricula_key>.pdf` — não depende de banco nem de armazenamento externo |
+| Recurso (gerado pelo servidor) | PDF gerado em tempo real (`pdfkit`) e enviado ao Vercel Blob |
 | Sessão pós-senha | Token assinado (JWT), sem estado guardado no servidor |
 
 Como o repositório já está conectado ao Vercel, **qualquer push nesta branch
-gera um novo deploy automaticamente** — não há um passo manual de "publicar".
-O que falta configurar é só o banco e os anexos (seção 2).
+gera um novo deploy automaticamente**.
 
 ## Arquivos deste projeto
 
@@ -30,45 +33,55 @@ O que falta configurar é só o banco e os anexos (seção 2).
 | `app/page.js` | Página única com as 4 etapas do fluxo (componente cliente React) |
 | `app/layout.js`, `app/globals.css` | Layout raiz e estilos (mobile-first) |
 | `app/api/buscar-cpf/route.js` | Etapa 1 — localizar servidor pelo CPF |
-| `app/api/validar-senha/route.js` | Etapa 2 — validar senha e emitir token de sessão |
-| `app/api/confirmar/route.js` | Etapas 3-4 — confirmar dados, gravar requerimento/anexo |
+| `app/api/validar-senha/route.js` | Etapa 2 — validar senha, emitir token, retornar status + link da resposta |
+| `app/api/recurso/route.js` | Etapa 3 — gera o PDF do recurso a partir do texto digitado e grava no banco |
 | `lib/db.js` | Acesso ao Postgres (Neon) |
 | `lib/session.js` | Emissão/verificação do token de sessão (JWT) |
-| `lib/format.js`, `lib/anexo.js` | Utilitários |
+| `lib/pdf.js` | Geração do PDF do recurso (`pdfkit`) |
+| `lib/format.js` | Utilitário de formatação de data |
 | `scripts/schema.sql` | Estrutura das tabelas — rode uma vez no banco |
-| `scripts/seed.mjs` | Importa a lista de servidores (CSV) para o banco |
+| `scripts/seed.mjs` | Importa os 30 servidores (dados já embutidos no script) |
+| `public/respostas/*.pdf` | As 30 respostas (Minuta de Voto), uma por servidor |
 
 ---
 
-## 1. Estrutura dos dados (Postgres)
+## 1. De onde vêm os dados
 
-Sua lista de origem vem como `Ordem | CPF | MATR. | NOME | CLASSE | DATA`.
-Isso vira a tabela `servidores` (ver `scripts/schema.sql` para o SQL exato):
+Fonte: planilha **RECURSOS_-_PREENCHIDA_ajustada** (pasta *MANIFESTAÇÕES -
+SERVIDORES* da SEGEP), colunas `CPF | MATR. | NOME | CLASSE | ... | STATUS`.
+Cada servidor também tem uma subpasta própria nessa mesma pasta do Drive,
+contendo seu `Minuta_Voto_<Nome>.docx` — o documento de resposta.
 
-| Coluna | Vem de | Observações |
-|---|---|---|
-| `matricula` | `MATR.` | Identificador único (chave do upsert na importação) |
-| `nome` | `NOME` | Nome completo |
-| `cpf` | `CPF` | Só dígitos (11 caracteres) ou `NULL` até o cruzamento com a base da SEGEP — só passa a valer como senha de acesso quando estiver preenchido |
-| `classe` | `CLASSE` | Ex: GM I, GM II, Inspetor, Subinspetor, Subinspetora, Inspetora. **Não aparece na página** — fica só no banco, para uso interno da SEGEP |
-| `ordem` | `Ordem` | Número de ordem do protocolo original. Exibido na página, mas **somente leitura** |
-| `data_requerimento` | `DATA` | Data/hora do requerimento original de majoração. Exibido na página, mas **somente leitura** |
-| `status` | *(gerado pelo sistema)* | `Pendente` ou `Confirmado` |
-| `data_confirmacao` | *(gerado pelo sistema)* | Preenchida no momento em que o servidor confirma |
-| `tentativas_falhas`, `bloqueado_ate` | *(controle do sistema)* | Usadas só para limitar tentativas de senha — não edite manualmente |
+Isso foi processado uma única vez (não é algo que a aplicação repete
+sozinha):
 
-Duas tabelas adicionais registram a atividade (equivalentes às antigas abas
-`Log_Alterações` e `Requerimentos`):
+1. Os 30 registros (CPF, matrícula, nome, classe, status) foram extraídos da
+   planilha e embutidos diretamente em `scripts/seed.mjs`.
+2. Cada `Minuta_Voto_*.docx` foi baixado da subpasta do respectivo servidor e
+   convertido para PDF (LibreOffice headless), salvo em
+   `public/respostas/<matricula_key>.pdf`, onde `matricula_key` é a matrícula
+   só com os dígitos (ex: matrícula `0.0195308.1` → chave `001953081`).
 
-- **`log_confirmacoes`** — uma linha a cada vez que um servidor confirma os
-  dados (auditoria).
-- **`requerimentos`** — uma linha só quando o servidor preenche texto e/ou
-  anexo. `status_analise` começa sempre `Pendente`; cabe à SEGEP atualizar
-  manualmente conforme o requerimento for analisado.
+**Se a planilha ou alguma Minuta de Voto for corrigida depois**, esse
+processo precisa ser refeito manualmente para a(s) pessoa(s) afetada(s):
+atualize a linha correspondente em `scripts/seed.mjs` (e rode `npm run seed`
+de novo) e/ou substitua o PDF correspondente em `public/respostas/`.
 
-Nenhum campo da tela é editável pelo autoatendimento (nem `Nome`). Se algo
-estiver errado, o relato vai pelo campo Requerimento, e a correção em si é
-feita manualmente pela SEGEP direto no banco (ver seção 3).
+### Tabela `servidores`
+
+| Coluna | Observações |
+|---|---|
+| `matricula_key` | Matrícula só com dígitos — também é o nome do arquivo em `public/respostas/` |
+| `matricula` | Matrícula como consta na planilha de origem, para exibição |
+| `nome` | Nome completo |
+| `cpf` | Só dígitos (11 caracteres, com zeros à esquerda) — é a chave de busca e também a fonte da senha (últimos 4 dígitos) |
+| `classe` | Ex: GM I, GM II, Inspetor, Subinspetor, Subinspetora |
+| `status` | `Deferido` ou `Indeferido` — decisão sobre a manifestação |
+| `recurso_texto`, `recurso_pdf_url`, `data_recurso` | Preenchidos quando o servidor envia um recurso |
+| `tentativas_falhas`, `bloqueado_ate` | Controle de tentativas de senha — não edite manualmente |
+
+A aba `log_eventos` registra, para auditoria, cada vez que alguém acessa a
+resposta ou apresenta um recurso.
 
 ---
 
@@ -78,52 +91,39 @@ feita manualmente pela SEGEP direto no banco (ver seção 3).
 
 1. No [dashboard do Vercel](https://vercel.com/dashboard), abra o projeto
    `majora-oguardas` → aba **Storage**.
-2. **Create Database → Postgres (Neon)** → siga o assistente e conecte ao
-   projeto. Isso injeta automaticamente a variável de ambiente
-   `DATABASE_URL` (ou `POSTGRES_URL`) nos deploys.
-3. Abra o **SQL Editor** da Neon (link disponível na própria aba Storage do
-   Vercel, ou direto no console da Neon) e rode o conteúdo de
-   `scripts/schema.sql` uma vez, para criar as tabelas.
+2. **Create Database → Postgres (Neon)** → conecte ao projeto. Isso injeta
+   `DATABASE_URL` automaticamente.
+3. Abra o **SQL Editor** da Neon e rode o conteúdo de `scripts/schema.sql`
+   uma vez, para criar as tabelas (isso apaga tabelas de uma fase anterior
+   deste projeto, se existirem — veja o `drop table` no topo do script).
 
 ### 2.2 Conectar o armazenamento de anexos (Vercel Blob)
 
-1. Ainda na aba **Storage** → **Create Database → Blob** → conecte ao
-   projeto. Isso injeta `BLOB_READ_WRITE_TOKEN` automaticamente.
+1. Aba **Storage** → **Create Database → Blob** → conecte ao projeto. Isso
+   injeta `BLOB_READ_WRITE_TOKEN` automaticamente. É usado só para os PDFs de
+   recurso gerados em tempo real — as respostas (Minutas de Voto) já vêm
+   junto com o código, em `public/respostas/`.
 
 ### 2.3 Definir o segredo da sessão
 
 1. Aba **Settings → Environment Variables** do projeto.
 2. Adicione `SESSION_SECRET` com uma string aleatória longa (gere uma com
-   `openssl rand -base64 32`, por exemplo). Marque para os ambientes
-   Production e Preview.
-3. Faça um redeploy (ou aguarde o próximo push) para as variáveis passarem a
-   valer.
+   `openssl rand -base64 32`). Marque para os ambientes Production e Preview.
+3. Redeploy (ou aguarde o próximo push) para a variável valer.
 
-### 2.4 Importar a lista de servidores
-
-Isso roda do seu computador (não é um passo dentro do Vercel):
+### 2.4 Importar os 30 servidores
 
 ```bash
 npm install
-DATABASE_URL="postgres://...-a-mesma-connection-string-da-Neon" \
-  npm run seed -- caminho/para/lista.csv
+DATABASE_URL="postgres://...-a-mesma-connection-string-da-Neon" npm run seed
 ```
 
-O CSV precisa ter cabeçalho com as colunas `Ordem`, `CPF`, `MATR.`, `NOME`,
-`CLASSE`, `DATA` (nessa grafia ou parecida — o script tenta casar variações
-comuns). Rodar de novo com uma lista atualizada não duplica linhas: o
-`matricula` é a chave, e um CPF já preenchido antes nunca é apagado por uma
-linha nova sem CPF.
-
-A connection string da Neon fica em **Storage → (seu banco) → .env.local**
-no dashboard do Vercel, ou rodando `vercel env pull` na raiz do projeto.
+Idempotente — pode rodar de novo sem duplicar (upsert por `matricula_key`).
 
 ### 2.5 Deploy
 
-Não tem passo manual: o projeto já está conectado a este repositório
-GitHub, então cada push nesta branch (ou merge na branch de produção) gera
-um deploy novo automaticamente. Depois de configurar as três variáveis de
-ambiente acima e rodar a importação, a próxima visita a
+Sem passo manual: cada push nesta branch gera um deploy novo. Depois de
+configurar as variáveis acima e rodar a importação, a próxima visita a
 `https://majora-oguardas.vercel.app` já funciona com dados reais.
 
 ---
@@ -131,86 +131,52 @@ ambiente acima e rodar a importação, a próxima visita a
 ## 3. Fluxo funcional (como implementado)
 
 1. **Identificação por CPF** (`POST /api/buscar-cpf`): o servidor digita o
-   CPF completo (11 dígitos, com ou sem pontuação). O sistema localiza o
-   registro e revela **apenas o nome** — nenhum outro dado (matrícula,
-   classe, status etc.) é retornado nesta etapa. Como o CPF é único por
-   pessoa, essa etapa identifica a linha certa sem precisar de busca por
-   nome nem de campo de desambiguação.
-   Como mitigação simples contra tentativas automatizadas de descobrir
-   nomes testando CPFs em sequência, há um limite global (todas as sessões
-   somadas) de consultas por minuto, contado direto no Postgres
-   (`consultaDentroDoLimiteGlobal`).
-2. **Senha** (`POST /api/validar-senha`): compara os últimos 4 dígitos do
-   CPF armazenado com o valor digitado. Sempre retorna a mesma mensagem
-   genérica em caso de erro. Após 5 tentativas erradas naquele registro,
-   bloqueia novas tentativas por 15 minutos (contador e bloqueio
-   persistidos na própria tabela `servidores`). Em caso de sucesso, emite um
-   **token de sessão assinado** (JWT, 15 minutos de validade) — o backend
-   não guarda nenhum estado de sessão; o próprio token, assinado com
-   `SESSION_SECRET`, carrega o id do servidor e expira sozinho.
-3. **Exibição dos dados**: o CPF nunca é enviado ao cliente em texto — o
-   servidor só vê o placeholder fixo `XXX.XXX.XXX-**`, mesmo sendo o dono do
-   registro (ver seção "LGPD" abaixo). Todos os campos aparecem desabilitados:
-   nada nessa tela é editável pelo autoatendimento.
-4. **Confirmar** (`POST /api/confirmar`): grava `status = 'Confirmado'` e
-   `data_confirmacao = agora`, e uma linha em `log_confirmacoes`. Se o
-   servidor preencheu texto de requerimento e/ou anexo, uma linha também é
-   criada em `requerimentos` e o arquivo é enviado para o Vercel Blob — esse
-   requerimento é o canal para relatar qualquer dado incorreto; a correção
-   em si é feita manualmente pela SEGEP no banco, depois de ler o
-   requerimento.
-5. **Tela final**: confirma o registro com data/hora e menciona se o
-   requerimento foi recebido.
+   CPF completo. O sistema localiza o registro e revela **apenas o nome**.
+   Limite global de consultas por minuto contra tentativas automatizadas de
+   descobrir nomes testando CPFs em sequência.
+2. **Senha** (`POST /api/validar-senha`): últimos 4 dígitos do CPF. Mesma
+   lógica de tentativas/bloqueio (5 tentativas, 15 min) da fase anterior. Em
+   caso de sucesso, emite um token de sessão (JWT, 15 min) e retorna nome,
+   matrícula, classe, status e o link da resposta em PDF
+   (`/respostas/<matricula_key>.pdf`, servido como arquivo estático).
+3. **Sua manifestação**: mostra a decisão (`Deferido`/`Indeferido`) e um
+   botão para baixar a resposta completa. Se um recurso já tiver sido
+   enviado antes, mostra a data e o link para baixá-lo, com a opção de
+   enviar um novo (substitui o anterior).
+4. **Recurso** (`POST /api/recurso`): o texto digitado é transformado em PDF
+   (`lib/pdf.js`, layout com cabeçalho, dados do servidor e o texto) — o
+   mesmo princípio usado para gerar as manifestações originais (texto
+   digitado vira documento, não fica solto). O PDF é enviado ao Vercel Blob
+   e o link é salvo em `recurso_pdf_url`; a linha em `log_eventos` registra
+   o evento.
+5. **Tela final**: confirma o registro com data/hora e link para baixar o
+   recurso gerado.
 
 ---
 
 ## 4. Segurança e LGPD
 
-**Por que a identificação por CPF + senha de 4 dígitos é fraca — e por que
-isso é aceitável aqui, com os controles certos:**
+Mesma base de risco e mesmos controles da fase anterior (identificação por
+CPF completo + senha de 4 dígitos é baixa fricção, não autenticação forte —
+ver histórico do projeto). Pontos específicos desta fase:
 
-O CPF é dado pessoal (LGPD, art. 5º, I). Como o fluxo usa o CPF completo
-como chave de busca (etapa 1) e os últimos 4 dígitos do próprio CPF como
-"senha" (etapa 2), vale deixar claro, sem rodeios, o que isso significa na
-prática: **quem já sabe o CPF completo de alguém também sabe, por
-definição, os últimos 4 dígitos.** A etapa de senha não é um segundo fator
-independente — funciona como uma segunda digitação de confirmação, não como
-barreira contra quem já tem o CPF em mãos. O controle de acesso real deste
-sistema é, na prática, "só quem sabe o CPF de alguém consegue ver o nome e
-os dados dessa pessoa" — baixa fricção para autoconfirmação de dados já sob
-custódia da administração, não autenticação forte. Controles compensatórios:
-
-- **A etapa de CPF revela só o nome, nada além disso.**
-- **Limite global de consultas por minuto** na etapa de CPF, para dificultar
-  — sem eliminar — tentativas automatizadas de descobrir nomes testando
-  CPFs em sequência.
-- **Mascaramento total do CPF na tela de dados** — nem o próprio servidor vê
-  o CPF completo.
-- **Mensagem de erro genérica** na etapa de senha.
-- **Limite de tentativas de senha** (5) com bloqueio temporário (15 min) por
-  registro.
-- **Nenhum campo é editável pelo autoatendimento** — toda a tela de dados é
-  somente leitura. Correções vão pelo Requerimento e são feitas manualmente
-  pela SEGEP no banco, nunca automaticamente a partir do que o servidor
-  digitou.
-- **Token de sessão de curta duração** (15 min), assinado e sem estado no
-  servidor — depois de expirar, é preciso repetir CPF + senha.
-- **Anexos**: enviados como blobs públicos (URL de acesso é um caminho
-  aleatório e imprevisível — mesmo modelo de exposição de um link do Google
-  Drive só com "quem tem o link"). Se precisar de controle de acesso mais
-  forte (blob privado com URL assinada por requisição), é possível trocar
-  `access: 'public'` por `access: 'private'` em
-  `app/api/confirmar/route.js`, mas isso exige montar também uma tela
-  autenticada para a SEGEP baixar os anexos — fora do escopo desta entrega.
-- **HTTPS**: nativo do Vercel.
-
-**Sobre IP (auditoria):** diferente da versão anterior (Google Apps Script,
-que não expõe IP nenhum), rodando no Vercel o backend **tem acesso ao IP do
-cliente** via cabeçalho `x-forwarded-for`. Isso não está sendo registrado
-hoje (só é usado, de forma agregada, no limite de consultas por CPF/minuto);
-se a SEGEP quiser auditoria por IP por confirmação, é uma mudança pequena em
-`app/api/confirmar/route.js` e `log_confirmacoes` — avise se quiser que eu
-adicione.
+- **Dados reais de 30 servidores** (nome, CPF, decisão administrativa)
+  ficam no banco e nos 30 PDFs de resposta. Trate o banco e o repositório
+  (que contém os PDFs de resposta) com o mesmo cuidado de acesso que a
+  planilha e a pasta do Drive originais.
+- **Resposta em PDF como arquivo estático**: qualquer pessoa com a URL exata
+  (`/respostas/<matricula_key>.pdf`) consegue baixar o arquivo, sem
+  autenticação — a URL não é adivinhável a partir da interface (só aparece
+  depois de CPF + senha corretos), mas também não está tecnicamente
+  protegida por autenticação no servidor. Isso é aceitável para o mesmo
+  padrão de exposição já usado no projeto (mesmo modelo de "quem tem o link
+  acessa"), mas é uma decisão consciente — avise se quiser uma versão que
+  exija o token de sessão também para baixar o PDF.
+- **Recurso em PDF (Blob público)**: mesmo modelo — URL aleatória e
+  imprevisível, não protegida por autenticação adicional.
+- **Nenhuma correção de dado cadastral acontece por aqui** — esta tela não
+  edita nome, matrícula, classe ou status; ela só exibe a decisão e recebe o
+  texto do recurso.
 
 ---
 
@@ -222,23 +188,22 @@ cp .env.example .env.local   # preencha DATABASE_URL, BLOB_READ_WRITE_TOKEN, SES
 npm run dev                   # http://localhost:3000
 ```
 
-Use a mesma `DATABASE_URL` do banco de desenvolvimento/produção da Neon
-(ou crie um banco Neon separado só para testes locais).
-
 ---
 
 ## 6. Limitações conhecidas / decisões de design
 
-- O limite de consultas por CPF/minuto é global (soma de todos os usuários),
-  não por IP — uma pessoa mal-intencionada com muitas requisições em
-  paralelo ainda consome a cota de todo mundo antes de ser bloqueada. Um
-  limite por IP é possível (já temos acesso ao IP, diferente da versão
-  Apps Script) mas não foi implementado nesta entrega.
-- Nenhum campo é editável pelo próprio servidor nesta tela — toda a tela de
-  dados (Matrícula, Nome, CPF, Ordem, Data/hora do requerimento) é somente
-  leitura. Qualquer correção deve ser tratada diretamente com a SEGEP,
-  normalmente a partir do que o servidor descrever no campo Requerimento.
-- Não existe hoje uma tela autenticada para a SEGEP consultar
-  `requerimentos`/`servidores` — o acesso é direto pelo SQL Editor da Neon
-  (dashboard do Vercel) e pelo painel do Vercel Blob, equivalente a como a
-  versão anterior usava a própria Planilha Google e a pasta do Drive.
+- As respostas em PDF (`public/respostas/`) são um retrato estático do
+  momento em que foram exportadas de Minuta_Voto do Drive. Se a SEGEP
+  corrigir uma Minuta de Voto depois, é preciso substituir o PDF
+  correspondente manualmente (não há sincronização automática com o Drive —
+  ver seção 1).
+- Assim como a fase anterior, não existe hoje uma tela autenticada para a
+  SEGEP consultar recursos recebidos — o acesso é direto pelo SQL Editor da
+  Neon e pelo painel do Vercel Blob.
+- A geração de PDF (`pdfkit`) foi validada localmente; ainda não foi testada
+  em uma execução real no Vercel. Se o download do recurso falhar em
+  produção (raro, mas possível por causa de como funções serverless
+  empacotam dependências), a causa mais provável são os arquivos de fonte
+  do `pdfkit` não incluídos no bundle — nesse caso, adicionar
+  `outputFileTracingIncludes` no `next.config.mjs` apontando para
+  `node_modules/pdfkit/js/standard-fonts/**` resolve.

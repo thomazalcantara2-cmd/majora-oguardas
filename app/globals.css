@@ -322,6 +322,15 @@ textarea {
   background: var(--success);
 }
 
+.pill-denied {
+  background: var(--error-bg);
+  color: var(--error);
+}
+
+.pill-denied::before {
+  background: var(--error);
+}
+
 .sep {
   border: none;
   border-top: 1px solid var(--line-soft);

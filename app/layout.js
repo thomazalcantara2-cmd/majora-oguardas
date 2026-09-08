@@ -1,9 +1,9 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'Confirmação de Dados Cadastrais — Majoração de Jornada',
+  title: 'Resposta e Recurso — Majoração de Jornada',
   description:
-    'Confirmação de dados de requerimento de majoração de jornada de 30h para 40h — SEGEP, Guarda Municipal de Jaboatão dos Guararapes.'
+    'Consulta da resposta à manifestação e apresentação de recurso — SEGEP, Guarda Municipal de Jaboatão dos Guararapes.'
 };
 
 export const viewport = {

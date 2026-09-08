@@ -12,6 +12,9 @@
 # Vercel
 .vercel
 
+# Claude Code agent worktrees
+.claude/
+
 # Misc
 .DS_Store
 *.log

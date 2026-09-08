@@ -1,47 +1,44 @@
--- Sistema de Confirmação de Dados Cadastrais — Majoração de Jornada 40h
+-- Sistema de Recursos — Manifestações dos Servidores (Guarda Municipal)
+-- Fase 2: o servidor consulta a resposta à sua manifestação (Minuta de Voto)
+-- e, se quiser, apresenta recurso contra o deferimento/indeferimento.
+--
 -- Rode este script uma vez no seu banco Postgres (Neon, via Vercel Storage)
--- antes do primeiro deploy. Veja README.md para o passo a passo completo.
+-- antes do primeiro deploy desta fase. Substitui o schema da fase anterior
+-- (confirmação de dados de majoração 30h->40h) — veja README.md.
 
-create table if not exists servidores (
+drop table if exists requerimentos;
+drop table if exists log_confirmacoes;
+drop table if exists servidores;
+
+create table servidores (
   id serial primary key,
-  matricula text unique not null,
+  matricula_key text unique not null, -- só os dígitos da matrícula; também é o nome do PDF em /public/respostas
+  matricula text not null,             -- matrícula como consta na planilha de origem (ex: "0.0195308.1")
   nome text not null,
-  cpf text unique, -- somente dígitos (11 caracteres); NULL até o cruzamento com a SEGEP
+  cpf text unique not null,            -- somente dígitos (11 caracteres, com zeros à esquerda)
   classe text,
-  ordem text,
-  data_requerimento timestamptz,
-  status text not null default 'Pendente',
-  data_confirmacao timestamptz,
+  status text not null,                -- 'Deferido' ou 'Indeferido' (decisão sobre a manifestação)
+  recurso_texto text,
+  recurso_pdf_url text,
+  data_recurso timestamptz,
   tentativas_falhas integer not null default 0,
   bloqueado_ate timestamptz
 );
 
--- Log de confirmações (auditoria). Como nenhum campo é editável pelo
--- autoatendimento, só existem entradas do tipo 'Confirmação'.
-create table if not exists log_confirmacoes (
+create index idx_servidores_cpf on servidores (cpf);
+
+-- Log de acessos/ações (auditoria).
+create table log_eventos (
   id serial primary key,
   criado_em timestamptz not null default now(),
   matricula text not null,
-  tipo text not null default 'Confirmação'
+  tipo text not null -- 'Acesso à resposta' ou 'Recurso apresentado'
 );
 
--- Requerimentos (texto livre + anexo opcional), pendentes de análise da SEGEP.
-create table if not exists requerimentos (
-  id serial primary key,
-  criado_em timestamptz not null default now(),
-  matricula text not null,
-  nome text not null,
-  texto text,
-  anexo_url text,
-  status_analise text not null default 'Pendente'
-);
-
--- Contador usado só para o limite global de consultas por CPF/minuto
--- (mitigação simples contra tentativas automatizadas de descobrir nomes
--- testando CPFs em sequência — ver README.md, seção "Segurança e LGPD").
+-- Mesmo contador de limite global de consultas por CPF/minuto da fase
+-- anterior (mitigação simples contra tentativas automatizadas de descobrir
+-- nomes testando CPFs em sequência — ver README.md).
 create table if not exists cpf_lookup_rate_limit (
   bucket_minuto bigint primary key,
   contagem integer not null default 0
 );
-
-create index if not exists idx_servidores_cpf on servidores (cpf);
