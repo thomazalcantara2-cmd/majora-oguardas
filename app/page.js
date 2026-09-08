@@ -146,32 +146,37 @@ export default function Page() {
           </div>
           <img src="/logo-pmjg.png" alt="Jaboatão dos Guararapes" className="org-logo" />
         </div>
-        <div className="stripe-meta">
-          <span className="stripe stripe-amarela" />
-          <span className="stripe stripe-verde" />
-          <span className="stripe-label">Guarda Municipal · Majoração de jornada</span>
+        <div className="hero">
+          <div className="stripe-meta">
+            <span className="stripe stripe-amarela" />
+            <span className="stripe stripe-verde" />
+            <span className="stripe-label">Guarda Municipal · Majoração de jornada</span>
+          </div>
+          <h1>Resposta à manifestação e recurso</h1>
+          <p className="subtitle">
+            Consulte a resposta à sua manifestação sobre a classificação prévia da majoração de jornada e, se quiser,
+            apresente recurso.
+          </p>
         </div>
-        <h1>Resposta à manifestação e recurso</h1>
-        <p className="subtitle">
-          Consulte a resposta à sua manifestação sobre a classificação prévia da majoração de jornada e, se quiser,
-          apresente recurso.
-        </p>
       </header>
 
-      <div className="stepper">
-        {STEPS.map((s, i) => (
-          <div key={s} className={`tick ${i < stepIndex ? 'done' : ''} ${i === stepIndex ? 'current' : ''}`} />
-        ))}
-      </div>
-      <div className="step-labels">
-        {STEPS.map((s, i) => (
-          <span key={s} className={i <= stepIndex ? 'active' : ''}>
-            {STEP_LABELS[s]}
-          </span>
-        ))}
-      </div>
+      <div className="textura-faixa" aria-hidden="true" />
 
-      <main style={{ position: 'relative' }}>
+      <div className="content-col">
+        <div className="stepper">
+          {STEPS.map((s, i) => (
+            <div key={s} className={`tick ${i < stepIndex ? 'done' : ''} ${i === stepIndex ? 'current' : ''}`} />
+          ))}
+        </div>
+        <div className="step-labels">
+          {STEPS.map((s, i) => (
+            <span key={s} className={i <= stepIndex ? 'active' : ''}>
+              {STEP_LABELS[s]}
+            </span>
+          ))}
+        </div>
+
+        <main style={{ position: 'relative' }}>
         {step === 'search' && (
           <section className="card">
             <h2>Digite seu CPF</h2>
@@ -277,9 +282,7 @@ export default function Page() {
 
             {dados.recursoJaEnviado && !editandoRecurso ? (
               <>
-                <p className="msg" style={{ background: 'var(--brand-soft)', color: 'var(--brand-strong)' }}>
-                  Recurso já apresentado em {dados.dataRecurso}.
-                </p>
+                <p className="msg msg-warn">Recurso já apresentado em {dados.dataRecurso}.</p>
                 {dados.recursoPdfUrl && (
                   <a href={dados.recursoPdfUrl} target="_blank" rel="noreferrer" className="btn btn-primary">
                     Baixar meu recurso (PDF)
@@ -341,11 +344,12 @@ export default function Page() {
             <div className="spinner" />
           </div>
         )}
-      </main>
+        </main>
 
-      <footer className="app-footer">
-        <p>SEGEP — Secretaria Executiva de Gestão de Pessoas</p>
-      </footer>
+        <footer className="app-footer">
+          <p>SEGEP — Secretaria Executiva de Gestão de Pessoas</p>
+        </footer>
+      </div>
     </div>
   );
 }

@@ -1,25 +1,30 @@
 :root {
-  --paper: #eef1f8;
+  --paper: #eef1f6;
   --surface: #ffffff;
-  --ink: #17224d;
-  --ink-soft: #4a5578;
-  --ink-faint: #6b7490;
-  --line: #d8ddef;
-  --line-soft: #e6eaf6;
-  --brand: #0a3cc8;
-  --brand-strong: #072c94;
-  --brand-soft: #eef1fd;
+  --ink: #10233f;
+  --ink-soft: #5a6a82;
+  --ink-faint: #8494ac;
+  --line: #e2e7f0;
+  --line-soft: #edf1f8;
+  --brand: #0a32b4;
+  --brand-strong: #082788;
+  --brand-soft: #ecf0fd;
   --brand-ink: #ffffff;
-  --accent-amarelo: #ffb612;
-  --accent-verde: #00a03e;
-  --success: #00812f;
-  --success-bg: #e3f3ea;
+  --amarelo: #ffc20e;
+  --laranja: #f59300;
+  --success: #00a03e;
+  --success-bg: #e2f5e9;
   --success-line: #b7e0c8;
   --error: #b3261e;
   --error-bg: #fbe7e5;
   --error-line: #f1c2bd;
-  --focus: #0a3cc8;
-  --shadow: 0 1px 2px rgba(10, 20, 60, 0.06), 0 8px 24px -12px rgba(10, 20, 60, 0.2);
+  --warn-bg: #fff3d1;
+  --warn-border: #f3dfa4;
+  --warn-text: #6b5410;
+  --field-bg: #fbfcfe;
+  --field-border: #dce3ee;
+  --focus: #0a32b4;
+  --shadow: 0 2px 4px rgba(16, 35, 63, 0.04), 0 16px 36px -18px rgba(16, 35, 63, 0.22);
   font-size: 16px;
 }
 
@@ -32,19 +37,24 @@
     --ink-faint: #8891b8;
     --line: #2c355a;
     --line-soft: #232b4a;
-    --brand: #6f93ff;
+    --brand: #7d9dff;
     --brand-strong: #a3bcff;
     --brand-soft: #202a4c;
     --brand-ink: #0b1330;
-    --accent-amarelo: #ffc94d;
-    --accent-verde: #3fcf7f;
-    --success: #55d193;
+    --amarelo: #ffc94d;
+    --laranja: #ff9f3d;
+    --success: #3fcf7f;
     --success-bg: #123625;
     --success-line: #1f5a3c;
     --error: #f2887e;
     --error-bg: #3a1815;
     --error-line: #5c2620;
-    --focus: #6f93ff;
+    --warn-bg: #3a2f10;
+    --warn-border: #5c4c1c;
+    --warn-text: #f3d98a;
+    --field-bg: #1c2340;
+    --field-border: #333e66;
+    --focus: #7d9dff;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 28px -14px rgba(0, 0, 0, 0.6);
   }
 }
@@ -62,7 +72,7 @@ body {
 body {
   background: var(--paper);
   color: var(--ink);
-  font-family: 'Public Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Archivo', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
@@ -73,9 +83,9 @@ body {
 }
 
 .shell {
-  max-width: 560px;
+  max-width: 1080px;
   margin: 0 auto;
-  padding: 20px 16px 56px;
+  padding: 24px 32px 56px;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -88,7 +98,7 @@ body {
   justify-content: space-between;
   gap: 14px;
   padding-bottom: 10px;
-  border-bottom: 2px solid var(--brand);
+  border-bottom: 1px solid var(--line);
 }
 
 .org-text {
@@ -118,11 +128,18 @@ body {
   flex-shrink: 0;
 }
 
+.hero {
+  margin-top: 4px;
+  padding: 26px 26px 24px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, var(--amarelo) 0%, var(--laranja) 100%);
+}
+
 .stripe-meta {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 12px;
+  margin-bottom: 12px;
 }
 
 .stripe {
@@ -133,12 +150,12 @@ body {
 
 .stripe-amarela {
   width: 30px;
-  background: var(--accent-amarelo);
+  background: var(--brand);
 }
 
 .stripe-verde {
   width: 12px;
-  background: var(--accent-verde);
+  background: var(--success);
 }
 
 .stripe-label {
@@ -146,17 +163,31 @@ body {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--ink-faint);
+  color: var(--ink);
+  opacity: 0.72;
   margin-left: 4px;
 }
 
+.textura-faixa {
+  height: 16px;
+  background-image: url('/faixa-textura.svg');
+  background-repeat: repeat-x;
+  background-position: left center;
+  background-size: auto 16px;
+}
+
 h1 {
-  font-size: 1.5rem;
+  font-size: 1.6rem;
   font-weight: 800;
-  letter-spacing: -0.01em;
-  margin: 6px 0 4px;
+  letter-spacing: -0.02em;
+  margin: 0 0 6px;
   text-wrap: balance;
   color: var(--ink);
+}
+
+.hero .subtitle {
+  color: var(--ink);
+  opacity: 0.82;
 }
 
 .subtitle {
@@ -164,6 +195,15 @@ h1 {
   color: var(--ink-soft);
   font-size: 0.94rem;
   max-width: 46ch;
+}
+
+.content-col {
+  max-width: 620px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
 .stepper {
@@ -201,8 +241,8 @@ h1 {
   font-size: 0.68rem;
   color: var(--ink-faint);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: 600;
+  letter-spacing: 0.1em;
+  font-weight: 700;
 }
 
 .step-labels span.active {
@@ -212,16 +252,17 @@ h1 {
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 22px 18px;
+  border-radius: 18px;
+  padding: 24px 20px;
   box-shadow: var(--shadow);
 }
 
 .card h2 {
   margin: 0 0 4px;
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--ink);
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--brand);
 }
 
 .lede {
@@ -232,10 +273,12 @@ h1 {
 
 label {
   display: block;
-  font-weight: 600;
-  font-size: 0.82rem;
-  margin: 16px 0 6px;
-  color: var(--ink);
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin: 18px 0 7px;
+  color: var(--ink-faint);
 }
 
 label:first-of-type {
@@ -257,9 +300,9 @@ textarea {
   padding: 12px 13px;
   font-size: 1rem;
   font-family: inherit;
-  border: 1px solid var(--line);
+  border: 1px solid var(--field-border);
   border-radius: 10px;
-  background: var(--surface);
+  background: var(--field-bg);
   color: var(--ink);
 }
 
@@ -292,6 +335,7 @@ textarea {
   border-radius: 10px;
   border: 1px solid transparent;
   cursor: pointer;
+  transition: background-color 0.15s ease;
 }
 
 .btn:active {
@@ -303,6 +347,10 @@ textarea {
   color: var(--brand-ink);
 }
 
+.btn-primary:hover:not(:disabled) {
+  background: var(--brand-strong);
+}
+
 .btn-primary:disabled {
   opacity: 0.55;
   cursor: not-allowed;
@@ -312,7 +360,7 @@ textarea {
   background: none;
   border: none;
   color: var(--brand);
-  font-weight: 600;
+  font-weight: 700;
   font-size: 0.85rem;
   padding: 0;
   margin: 0 0 14px;
@@ -332,6 +380,12 @@ textarea {
   background: var(--error-bg);
   color: var(--error);
   border: 1px solid var(--error-line);
+}
+
+.msg-warn {
+  background: var(--warn-bg);
+  color: var(--warn-text);
+  border: 1px solid var(--warn-border);
 }
 
 .hint {
@@ -358,12 +412,12 @@ textarea {
 }
 
 .pill-pending {
-  background: #f7ecd6;
-  color: #9a6b0a;
+  background: var(--warn-bg);
+  color: var(--warn-text);
 }
 
 .pill-pending::before {
-  background: #9a6b0a;
+  background: var(--warn-text);
 }
 
 .pill-confirmed {
