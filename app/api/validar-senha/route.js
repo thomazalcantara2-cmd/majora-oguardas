@@ -5,7 +5,8 @@ import {
   zerarTentativas,
   registrarAcessoResposta,
   MAX_TENTATIVAS,
-  normalizarCpf
+  normalizarCpf,
+  somenteDigitos
 } from '../../../lib/db';
 import { emitirToken } from '../../../lib/session';
 import { formatarData } from '../../../lib/format';
@@ -42,7 +43,7 @@ export async function POST(request) {
 
   const cpfDigitos = normalizarCpf(servidor.cpf);
   const ultimos4 = cpfDigitos.slice(-4);
-  const senhaDigitos = normalizarCpf(senha);
+  const senhaDigitos = somenteDigitos(senha);
 
   if (!cpfDigitos || senhaDigitos.length !== 4 || senhaDigitos !== ultimos4) {
     const tentativas = (servidor.tentativas_falhas || 0) + 1;
@@ -69,7 +70,7 @@ export async function POST(request) {
       classe: servidor.classe || '',
       status: servidor.status,
       respostaUrl: `/respostas/${servidor.matricula_key}.pdf`,
-      recursoJaEnviado: Boolean(servidor.recurso_texto),
+      recursoJaEnviado: Boolean(servidor.recurso_pdf_url),
       dataRecurso: servidor.data_recurso ? formatarData(servidor.data_recurso, true) : '',
       recursoPdfUrl: servidor.recurso_pdf_url || ''
     }

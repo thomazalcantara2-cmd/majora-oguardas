@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { buscarServidorPorCpf, consultaDentroDoLimiteGlobal, normalizarCpf } from '../../../lib/db';
+import { buscarServidorPorCpf, normalizarCpf, somenteDigitos } from '../../../lib/db';
 
 const MENSAGEM_ERRO_CPF =
   'Não encontramos esse CPF na base de servidores que apresentaram manifestação. Verifique os números digitados.';
@@ -12,18 +12,16 @@ export async function POST(request) {
     return NextResponse.json({ ok: false, message: MENSAGEM_ERRO_CPF }, { status: 400 });
   }
 
-  const cpfDigitos = normalizarCpf(body.cpf);
-  if (cpfDigitos.length !== 11) {
+  // Validado ANTES de qualquer normalização com padding: um CPF incompleto
+  // digitado pelo usuário nunca deve ser "completado" com zeros à esquerda
+  // — isso só se aplica ao valor já cadastrado na planilha (que pode ter
+  // perdido zeros à esquerda por estar numa célula numérica).
+  const digitosDigitados = somenteDigitos(body.cpf);
+  if (digitosDigitados.length !== 11) {
     return NextResponse.json({ ok: false, message: MENSAGEM_ERRO_CPF });
   }
 
-  const dentroDoLimite = await consultaDentroDoLimiteGlobal();
-  if (!dentroDoLimite) {
-    return NextResponse.json({
-      ok: false,
-      message: 'Muitas consultas em um curto intervalo. Aguarde um momento e tente novamente.'
-    });
-  }
+  const cpfDigitos = normalizarCpf(digitosDigitados);
 
   const servidor = await buscarServidorPorCpf(cpfDigitos);
   if (!servidor) {

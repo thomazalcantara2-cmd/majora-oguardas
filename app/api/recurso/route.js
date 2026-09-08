@@ -66,7 +66,6 @@ export async function POST(request) {
   await registrarRecurso({
     id: servidor.id,
     matricula: servidor.matricula,
-    texto,
     pdfUrl: resultado.url
   });
 
