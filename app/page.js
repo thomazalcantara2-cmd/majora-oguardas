@@ -208,7 +208,7 @@ export default function Page() {
         </div>
       </div>
 
-      <div className="content-col" style={step === 'data' ? { maxWidth: '1080px' } : undefined}>
+      <div className="content-col">
         <main style={{ position: 'relative' }}>
         {step === 'search' && (
           <section className="card">
