@@ -20,7 +20,7 @@ recurso.
 | Banco de dados | A própria Planilha Google — lida/escrita através de um Web App do Apps Script |
 | Resposta (Minuta de Voto) | Localizada dinamicamente na pasta do próprio servidor no Drive (arquivo PDF com "MINUTA" no nome); se ainda não existir por lá, cai para o PDF estático em `public/respostas/<matricula_key>.pdf` |
 | Recurso (gerado pelo servidor) | PDF gerado em tempo real (`pdfkit`), no mesmo padrão visual do Requerimento original, e salvo na pasta do próprio servidor no Drive (via o mesmo Apps Script) como `RECURSO_<NOME DO SERVIDOR>_<carimbo>.pdf` — cada envio cria um arquivo novo, nenhum é apagado ou sobrescrito; o link do mais recente fica na coluna `Recurso` da planilha |
-| Anexo do recurso (opcional) | Arquivo enviado pelo servidor junto com o recurso (PDF, imagem ou Word, até 3 MB), salvo na mesma pasta como `RECURSO_<NOME DO SERVIDOR>_<carimbo>.<extensão original>`; o link do mais recente fica na coluna `Anexo_Recurso` |
+| Anexo do recurso (opcional) | Arquivo enviado pelo servidor junto com o recurso (PDF, imagem ou Word, até 3 MB), salvo na mesma pasta como `ANEXO_REQUERIMENTO_<NOME DO SERVIDOR>_<carimbo>.<extensão original>` (nome diferente do PDF do recurso, para não ficarem parecidos); o link do mais recente fica na coluna `Anexo_Recurso` |
 | Sessão pós-senha | Token assinado (JWT), sem estado guardado no servidor |
 
 Como o repositório já está conectado ao Vercel, **qualquer push nesta branch
@@ -184,11 +184,13 @@ Não tem problema deixá-lo conectado também, só fica sem uso.
    declaração e assinatura eletrônica); o servidor também pode anexar um
    arquivo (PDF, imagem ou Word, até 3 MB). Os dois são enviados ao Apps
    Script em base64, que salva na pasta do próprio servidor no Drive como
-   `RECURSO_<NOME DO SERVIDOR>_<carimbo>.pdf` e `RECURSO_<NOME DO
-   SERVIDOR>_<carimbo>.<extensão original>` (mesmo carimbo de data/hora nos
-   dois, gerado pelo Next.js) — cada envio é um arquivo novo, nenhum arquivo
-   de um envio anterior é apagado, movido para a lixeira ou sobrescrito — e
-   devolve as URLs; elas e a data são gravadas nas colunas
+   `RECURSO_<NOME DO SERVIDOR>_<carimbo>.pdf` e `ANEXO_REQUERIMENTO_<NOME DO
+   SERVIDOR>_<carimbo>.<extensão original>` (nomes diferentes entre si, mas
+   com o mesmo carimbo de data/hora, gerado pelo Next.js, para os dois
+   ficarem identificáveis como o mesmo envio) — cada envio é um arquivo
+   novo, nenhum arquivo de um envio anterior é apagado, movido para a
+   lixeira ou sobrescrito — e devolve as URLs; elas e a data são gravadas
+   nas colunas
    `Recurso`/`Anexo_Recurso`/`Data_Recurso`, e uma linha é adicionada à aba
    `Log_Eventos`.
 5. **Tela final**: confirma o registro com data/hora e link para baixar o

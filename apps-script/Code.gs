@@ -240,10 +240,12 @@ function salvarPdfRecurso_(nome, base64, carimbo) {
 
 /**
  * Recebe o anexo do recurso (base64) e salva na pasta do próprio servidor,
- * como "RECURSO_<NOME DO SERVIDOR>_<carimbo>.<extensão original>" — mesmo
- * nome-base e carimbo do PDF do recurso (quando o Next.js manda o mesmo
- * `carimbo` para os dois), para ficarem juntos e identificáveis na pasta.
- * Devolve a URL do arquivo.
+ * como "ANEXO_REQUERIMENTO_<NOME DO SERVIDOR>_<carimbo>.<extensão
+ * original>" — nome diferente do PDF do recurso (que começa com
+ * "RECURSO_"), para não ficarem parecidos na pasta; usa o mesmo carimbo do
+ * PDF do recurso (quando o Next.js manda o mesmo `carimbo` para os dois)
+ * para os dois ficarem identificáveis como o mesmo envio. Devolve a URL do
+ * arquivo.
  */
 function salvarAnexoRecurso_(nome, base64, nomeArquivoOriginal, tipoMime, carimbo) {
   if (!base64) throw new Error('Anexo vazio.');
@@ -253,7 +255,7 @@ function salvarAnexoRecurso_(nome, base64, nomeArquivoOriginal, tipoMime, carimb
   if (nomeArquivoOriginal && nomeArquivoOriginal.indexOf('.') !== -1) {
     extensao = '.' + nomeArquivoOriginal.split('.').pop();
   }
-  var nomeArquivo = 'RECURSO_' + limparNomeArquivo_(nome) + '_' + (carimbo || gerarCarimbo_()) + extensao;
+  var nomeArquivo = 'ANEXO_REQUERIMENTO_' + limparNomeArquivo_(nome) + '_' + (carimbo || gerarCarimbo_()) + extensao;
 
   var bytes = Utilities.base64Decode(base64);
   var blob = Utilities.newBlob(bytes, tipoMime || 'application/octet-stream', nomeArquivo);
