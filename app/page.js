@@ -208,7 +208,7 @@ export default function Page() {
         </div>
       </div>
 
-      <div className="content-col">
+      <div className="content-col" style={step === 'data' ? { maxWidth: '1080px' } : undefined}>
         <main style={{ position: 'relative' }}>
         {step === 'search' && (
           <section className="card">
@@ -282,6 +282,7 @@ export default function Page() {
             <h2>Sua manifestação</h2>
             <p className="lede">Confira abaixo a decisão sobre a sua manifestação e baixe a resposta completa.</p>
 
+            <p className="field-label">Status da Manifestação</p>
             <span className={`pill ${dados.status === 'Deferido' ? 'pill-confirmed' : 'pill-denied'}`}>
               {dados.status}
             </span>
