@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { obterServidorPorId, registrarRecurso } from '../../../lib/db';
 import { verificarToken } from '../../../lib/session';
-import { formatarData } from '../../../lib/format';
+import { formatarData, formatarCarimboArquivo } from '../../../lib/format';
 import { gerarPdfRecurso } from '../../../lib/pdf';
 
 const TAMANHO_MAXIMO_TEXTO = 8000;
@@ -61,6 +61,7 @@ export async function POST(request) {
 
   const agora = new Date();
   const dataHora = formatarData(agora, true);
+  const carimbo = formatarCarimboArquivo(agora);
 
   const pdfBuffer = await gerarPdfRecurso({
     nome: servidor.nome,
@@ -77,7 +78,8 @@ export async function POST(request) {
     matricula: servidor.matricula,
     nome: servidor.nome,
     bufferPdf: pdfBuffer,
-    anexo
+    anexo,
+    carimbo
   });
 
   return NextResponse.json({

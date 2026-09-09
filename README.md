@@ -19,8 +19,8 @@ recurso.
 | Framework | Next.js (App Router), hospedado no Vercel |
 | Banco de dados | A própria Planilha Google — lida/escrita através de um Web App do Apps Script |
 | Resposta (Minuta de Voto) | Localizada dinamicamente na pasta do próprio servidor no Drive (arquivo PDF com "MINUTA" no nome); se ainda não existir por lá, cai para o PDF estático em `public/respostas/<matricula_key>.pdf` |
-| Recurso (gerado pelo servidor) | PDF gerado em tempo real (`pdfkit`), no mesmo padrão visual do Requerimento original, e salvo na pasta do próprio servidor no Drive (via o mesmo Apps Script) como `RECURSO_<NOME DO SERVIDOR>.pdf`; o link fica na coluna `Recurso` da planilha |
-| Anexo do recurso (opcional) | Arquivo enviado pelo servidor junto com o recurso (PDF, imagem ou Word, até 3 MB), salvo na mesma pasta como `RECURSO_<NOME DO SERVIDOR>.<extensão original>`; o link fica na coluna `Anexo_Recurso` |
+| Recurso (gerado pelo servidor) | PDF gerado em tempo real (`pdfkit`), no mesmo padrão visual do Requerimento original, e salvo na pasta do próprio servidor no Drive (via o mesmo Apps Script) como `RECURSO_<NOME DO SERVIDOR>_<carimbo>.pdf` — cada envio cria um arquivo novo, nenhum é apagado ou sobrescrito; o link do mais recente fica na coluna `Recurso` da planilha |
+| Anexo do recurso (opcional) | Arquivo enviado pelo servidor junto com o recurso (PDF, imagem ou Word, até 3 MB), salvo na mesma pasta como `RECURSO_<NOME DO SERVIDOR>_<carimbo>.<extensão original>`; o link do mais recente fica na coluna `Anexo_Recurso` |
 | Sessão pós-senha | Token assinado (JWT), sem estado guardado no servidor |
 
 Como o repositório já está conectado ao Vercel, **qualquer push nesta branch
@@ -175,17 +175,19 @@ Não tem problema deixá-lo conectado também, só fica sem uso.
 3. **Sua manifestação**: mostra a decisão (`Deferido`/`Indeferido`) e um
    botão para baixar a resposta completa. Se um recurso já tiver sido
    enviado antes (coluna `Recurso` preenchida), mostra a data e o link para
-   baixá-lo (e o do anexo, se houver), com a opção de enviar um novo
-   (substitui o anterior).
+   baixá-lo (e o do anexo, se houver), com a opção de enviar um novo — o
+   mais recente passa a ser o que a planilha e a tela mostram, mas o envio
+   anterior continua existindo no Drive (não é apagado).
 4. **Recurso** (`POST /api/recurso`): o texto digitado é transformado em PDF
    (`lib/pdf.js`, no mesmo layout institucional do Requerimento original —
    cabeçalho, identificação do recorrente com CPF completo, fundamentos,
    declaração e assinatura eletrônica); o servidor também pode anexar um
    arquivo (PDF, imagem ou Word, até 3 MB). Os dois são enviados ao Apps
    Script em base64, que salva na pasta do próprio servidor no Drive como
-   `RECURSO_<NOME DO SERVIDOR>.pdf` e `RECURSO_<NOME DO SERVIDOR>.<extensão
-   original>` — um envio novo substitui o anterior (o arquivo antigo com o
-   mesmo nome vai para a lixeira do Drive antes de salvar o novo) — e
+   `RECURSO_<NOME DO SERVIDOR>_<carimbo>.pdf` e `RECURSO_<NOME DO
+   SERVIDOR>_<carimbo>.<extensão original>` (mesmo carimbo de data/hora nos
+   dois, gerado pelo Next.js) — cada envio é um arquivo novo, nenhum arquivo
+   de um envio anterior é apagado, movido para a lixeira ou sobrescrito — e
    devolve as URLs; elas e a data são gravadas nas colunas
    `Recurso`/`Anexo_Recurso`/`Data_Recurso`, e uma linha é adicionada à aba
    `Log_Eventos`.
@@ -270,6 +272,16 @@ de produção do Apps Script.
   ocioso pode ter um "cold start" de alguns segundos). Para 30 usuários
   acessando esporadicamente, isso não chega a ser um problema.
 - **Sem limite global de consultas por CPF/minuto** — ver seção 4.
+- **Cada envio de recurso acumula um arquivo novo no Drive** (não substitui
+  nem apaga o anterior). Isso é intencional — evita depender de apagar/mover
+  arquivos entre requisições, o que se mostrou frágil em teste (apagar
+  manualmente o arquivo mais recente pela interface do Drive fazia o
+  próximo envio quebrar, mostrando "arquivo na lixeira do proprietário").
+  Para 30 servidores enviando o recurso (tipicamente) uma única vez, isso
+  não deve virar bagunça na pasta; se algum servidor reenviar várias vezes,
+  a SEGEP pode apagar manualmente as versões antigas na pasta dele quando
+  quiser — isso não afeta envios futuros, já que cada arquivo tem seu
+  próprio nome com carimbo de data/hora.
 - As respostas em PDF de `public/respostas/` são apenas um **fallback**: um
   retrato estático do momento em que foram exportadas dos
   `Minuta_Voto_*.docx` do Drive. Assim que a SEGEP colocar o PDF da minuta

@@ -66,11 +66,11 @@ function doPost(e) {
         registrarEvento_(payload.matricula, payload.tipo);
         return responderJson_({ ok: true });
       case 'salvarPdfRecurso':
-        return responderJson_({ ok: true, url: salvarPdfRecurso_(payload.nome, payload.base64) });
+        return responderJson_({ ok: true, url: salvarPdfRecurso_(payload.nome, payload.base64, payload.carimbo) });
       case 'salvarAnexoRecurso':
         return responderJson_({
           ok: true,
-          url: salvarAnexoRecurso_(payload.nome, payload.base64, payload.nomeArquivo, payload.tipo)
+          url: salvarAnexoRecurso_(payload.nome, payload.base64, payload.nomeArquivo, payload.tipo, payload.carimbo)
         });
       case 'obterLinkResposta':
         return responderJson_({ ok: true, url: obterLinkResposta_(payload.nome) });
@@ -205,17 +205,19 @@ function limparNomeArquivo_(nome) {
     .toUpperCase();
 }
 
+/** Um carimbo de data/hora para nomear arquivo (sem barras/dois-pontos),
+ * usado como plano B caso o Next.js não tenha mandado um (payload.carimbo). */
+function gerarCarimbo_() {
+  return Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'America/Recife', 'dd-MM-yyyy_HH-mm-ss');
+}
+
 /**
- * Cria um arquivo na pasta do servidor com um nome fixo (sem carimbo de
- * data/hora) — se já existir um arquivo com esse nome (envio anterior),
- * manda para a lixeira antes, para o novo "substituir" o antigo em vez de
- * empilhar cópias. Devolve o arquivo criado.
+ * Cria um arquivo na pasta do servidor. Cada chamada gera um arquivo NOVO
+ * (o nome inclui um carimbo de data/hora) — nunca mexe em arquivos de
+ * envios anteriores, então apagar um arquivo manualmente no Drive não afeta
+ * os próximos envios. Devolve o arquivo criado.
  */
-function substituirArquivoNaPasta_(pasta, nomeArquivo, blob) {
-  var existentes = pasta.getFilesByName(nomeArquivo);
-  while (existentes.hasNext()) {
-    existentes.next().setTrashed(true);
-  }
+function criarArquivoNaPasta_(pasta, nomeArquivo, blob) {
   var arquivo = pasta.createFile(blob);
   arquivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   return arquivo;
@@ -223,26 +225,27 @@ function substituirArquivoNaPasta_(pasta, nomeArquivo, blob) {
 
 /**
  * Recebe o PDF do recurso (base64) e salva na pasta do próprio servidor,
- * como "RECURSO_<NOME DO SERVIDOR>.pdf" — um envio novo substitui o
- * anterior. Devolve a URL do arquivo.
+ * como "RECURSO_<NOME DO SERVIDOR>_<carimbo>.pdf". Devolve a URL do
+ * arquivo.
  */
-function salvarPdfRecurso_(nome, base64) {
+function salvarPdfRecurso_(nome, base64, carimbo) {
   if (!base64) throw new Error('PDF vazio.');
   var pasta = getPastaServidor_(nome);
-  var nomeArquivo = 'RECURSO_' + limparNomeArquivo_(nome) + '.pdf';
+  var nomeArquivo = 'RECURSO_' + limparNomeArquivo_(nome) + '_' + (carimbo || gerarCarimbo_()) + '.pdf';
   var bytes = Utilities.base64Decode(base64);
   var blob = Utilities.newBlob(bytes, 'application/pdf', nomeArquivo);
-  var arquivo = substituirArquivoNaPasta_(pasta, nomeArquivo, blob);
+  var arquivo = criarArquivoNaPasta_(pasta, nomeArquivo, blob);
   return arquivo.getUrl();
 }
 
 /**
  * Recebe o anexo do recurso (base64) e salva na pasta do próprio servidor,
- * como "RECURSO_<NOME DO SERVIDOR>.<extensão original>" — mesmo padrão de
- * nome do PDF do recurso, para os dois ficarem juntos e identificáveis na
- * pasta. Um envio novo substitui o anterior. Devolve a URL do arquivo.
+ * como "RECURSO_<NOME DO SERVIDOR>_<carimbo>.<extensão original>" — mesmo
+ * nome-base e carimbo do PDF do recurso (quando o Next.js manda o mesmo
+ * `carimbo` para os dois), para ficarem juntos e identificáveis na pasta.
+ * Devolve a URL do arquivo.
  */
-function salvarAnexoRecurso_(nome, base64, nomeArquivoOriginal, tipoMime) {
+function salvarAnexoRecurso_(nome, base64, nomeArquivoOriginal, tipoMime, carimbo) {
   if (!base64) throw new Error('Anexo vazio.');
   var pasta = getPastaServidor_(nome);
 
@@ -250,11 +253,11 @@ function salvarAnexoRecurso_(nome, base64, nomeArquivoOriginal, tipoMime) {
   if (nomeArquivoOriginal && nomeArquivoOriginal.indexOf('.') !== -1) {
     extensao = '.' + nomeArquivoOriginal.split('.').pop();
   }
-  var nomeArquivo = 'RECURSO_' + limparNomeArquivo_(nome) + extensao;
+  var nomeArquivo = 'RECURSO_' + limparNomeArquivo_(nome) + '_' + (carimbo || gerarCarimbo_()) + extensao;
 
   var bytes = Utilities.base64Decode(base64);
   var blob = Utilities.newBlob(bytes, tipoMime || 'application/octet-stream', nomeArquivo);
-  var arquivo = substituirArquivoNaPasta_(pasta, nomeArquivo, blob);
+  var arquivo = criarArquivoNaPasta_(pasta, nomeArquivo, blob);
   return arquivo.getUrl();
 }
 
