@@ -148,7 +148,7 @@ body {
 }
 
 .hero-content {
-  max-width: 620px;
+  max-width: 100%;
   text-align: left;
 }
 
@@ -179,7 +179,7 @@ body {
   margin: 0;
   font-size: 16px;
   color: #4a3405;
-  max-width: 56ch;
+  max-width: 100%;
 }
 
 .container {
