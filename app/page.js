@@ -185,8 +185,9 @@ export default function Page() {
               de jornada
             </h1>
             <p className="hero-lede">
-              Consulte a resposta à sua manifestação sobre a classificação prévia da majoração de jornada e, se
-              quiser, apresente recurso.
+              Consulte a resposta à sua manifestação sobre a relação e a classificação preliminar para a majoração da
+              jornada dos Guardas Municipais de 30 (trinta) para 40 (quarenta) horas. Caso necessário, apresente
+              recurso dentro do prazo estabelecido.
             </p>
           </div>
         </div>
