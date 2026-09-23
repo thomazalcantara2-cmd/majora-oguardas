@@ -85,6 +85,17 @@ app nem rodar nada — o arquivo aparece disponível assim que for colocado na
 pasta certa. Enquanto não houver nenhum PDF com "RESPOSTA" no nome naquela
 pasta, o app mostra "resposta ainda não disponível" para aquele servidor.
 
+**O app também oferece, abaixo da resposta, um link para baixar o recurso
+que o próprio servidor apresentou** — o PDF `RECURSO_<NOME>_<carimbo>.pdf`
+já salvo na mesma pasta pela fase anterior do app. A busca é pelo PDF mais
+recente cujo nome contenha "RECURSO" mas não contenha "RESPOSTA" (para não
+confundir com o arquivo da resposta, que também tem "RECURSO" no nome) —
+então **se o servidor apresentou mais de um recurso, só o mais recente fica
+disponível para download**, automaticamente, sem precisar apagar os
+anteriores. Se não houver nenhum PDF de recurso na pasta, esse link
+simplesmente não aparece (ao contrário da resposta, não é tratado como algo
+"faltando").
+
 ---
 
 ## 3. Estrutura da planilha
@@ -161,13 +172,15 @@ Sem passo manual além do acima: cada push nesta branch gera um deploy novo.
 2. **Senha** (`POST /api/validar-senha`): últimos 4 dígitos do CPF. 5
    tentativas erradas bloqueiam o registro por 15 minutos (gravado nas
    colunas M/N pelo Apps Script). Em caso de sucesso, registra o acesso na
-   aba `Log_Eventos` e retorna nome, matrícula e o link da resposta ao
-   recurso — o Apps Script procura um PDF com "RESPOSTA" no nome dentro da
-   pasta do servidor no Drive (seção 2).
-3. **Resposta ao Recurso**: mostra matrícula e nome (somente leitura) e um
-   botão para baixar a resposta em PDF; se a SEGEP ainda não colocou o
-   arquivo na pasta, mostra uma mensagem de "ainda não disponível" em vez
-   de um link quebrado.
+   aba `Log_Eventos` e retorna nome, matrícula, o link da resposta ao
+   recurso (PDF com "RESPOSTA" no nome) e o link do recurso que o próprio
+   servidor apresentou (PDF mais recente com "RECURSO" no nome, exceto o da
+   resposta) — os dois buscados na pasta do servidor no Drive (seção 2).
+3. **Resposta ao Recurso**: mostra matrícula e nome (somente leitura), um
+   botão para baixar a resposta em PDF (ou uma mensagem de "ainda não
+   disponível" em vez de um link quebrado, se a SEGEP ainda não colocou o
+   arquivo na pasta) e, quando existir, um link secundário para baixar o
+   recurso que o servidor apresentou.
 
 Não há mais sessão/token entre a etapa 2 e a 3 — a URL da resposta já vem
 na própria resposta de `/api/validar-senha`, então não é preciso guardar

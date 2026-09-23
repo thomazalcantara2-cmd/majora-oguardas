@@ -73,6 +73,8 @@ function doPost(e) {
         return responderJson_({ ok: true });
       case 'obterLinkRespostaRecurso':
         return responderJson_({ ok: true, url: obterLinkRespostaRecurso_(payload.nome) });
+      case 'obterLinkRecursoApresentado':
+        return responderJson_({ ok: true, url: obterLinkRecursoApresentado_(payload.nome) });
       default:
         return responderJson_({ ok: false, erro: 'Ação desconhecida: ' + payload.acao });
     }
@@ -165,17 +167,21 @@ function getPastaServidor_(nome) {
 }
 
 /** Acha, dentro de uma pasta, o PDF mais recente cujo nome contém um termo
- * (sem diferenciar maiúsculas/minúsculas). Devolve null se não achar. */
-function localizarPdfNaPasta_(pasta, termo) {
+ * (sem diferenciar maiúsculas/minúsculas) e, opcionalmente, NÃO contém um
+ * segundo termo (para distinguir arquivos com nomes parecidos, ex:
+ * "RECURSO_..." vs "RESPOSTA_RECURSO_..."). Devolve null se não achar. */
+function localizarPdfNaPasta_(pasta, termo, termoExcluir) {
   var termoNormalizado = termo.toUpperCase();
+  var termoExcluirNormalizado = termoExcluir ? termoExcluir.toUpperCase() : null;
   var arquivos = pasta.getFilesByType(MimeType.PDF);
   var maisRecente = null;
   while (arquivos.hasNext()) {
     var arquivo = arquivos.next();
-    if (arquivo.getName().toUpperCase().indexOf(termoNormalizado) !== -1) {
-      if (!maisRecente || arquivo.getLastUpdated() > maisRecente.getLastUpdated()) {
-        maisRecente = arquivo;
-      }
+    var nomeArquivo = arquivo.getName().toUpperCase();
+    if (nomeArquivo.indexOf(termoNormalizado) === -1) continue;
+    if (termoExcluirNormalizado && nomeArquivo.indexOf(termoExcluirNormalizado) !== -1) continue;
+    if (!maisRecente || arquivo.getLastUpdated() > maisRecente.getLastUpdated()) {
+      maisRecente = arquivo;
     }
   }
   return maisRecente;
@@ -191,6 +197,23 @@ function localizarPdfNaPasta_(pasta, termo) {
 function obterLinkRespostaRecurso_(nome) {
   var pasta = getPastaServidor_(nome);
   var arquivo = localizarPdfNaPasta_(pasta, 'RESPOSTA');
+  if (!arquivo) return '';
+  arquivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return arquivo.getUrl();
+}
+
+/**
+ * Procura, na pasta do servidor, o PDF do recurso que o próprio servidor
+ * apresentou (nome "RECURSO_<NOME>_<carimbo>.pdf", da fase anterior do
+ * app) — exclui arquivos com "RESPOSTA" no nome, para não confundir com a
+ * resposta da SEGEP a esse recurso, que também tem "RECURSO" no nome. Se o
+ * servidor apresentou mais de um recurso, pega o mais recente (pelo
+ * carimbo de data/hora, refletido na data de modificação do arquivo).
+ * Devolve '' se não existir.
+ */
+function obterLinkRecursoApresentado_(nome) {
+  var pasta = getPastaServidor_(nome);
+  var arquivo = localizarPdfNaPasta_(pasta, 'RECURSO', 'RESPOSTA');
   if (!arquivo) return '';
   arquivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   return arquivo.getUrl();

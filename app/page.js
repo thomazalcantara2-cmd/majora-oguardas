@@ -227,6 +227,18 @@ export default function Page() {
                 A resposta ao seu recurso ainda não está disponível para consulta. Tente novamente mais tarde.
               </p>
             )}
+
+            {dados.recursoApresentadoUrl && (
+              <a
+                href={dados.recursoApresentadoUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="btn-ghost"
+                style={{ display: 'block', textAlign: 'center', marginTop: 14 }}
+              >
+                Baixar o recurso que você apresentou (PDF)
+              </a>
+            )}
           </section>
         )}
 

@@ -5,6 +5,7 @@ import {
   zerarTentativas,
   registrarAcessoResposta,
   obterLinkRespostaRecurso,
+  obterLinkRecursoApresentado,
   MAX_TENTATIVAS,
   normalizarCpf,
   somenteDigitos
@@ -59,13 +60,15 @@ export async function POST(request) {
   await zerarTentativas(id);
   await registrarAcessoResposta(servidor.matricula);
   const respostaRecursoUrl = await obterLinkRespostaRecurso(servidor.nome);
+  const recursoApresentadoUrl = await obterLinkRecursoApresentado(servidor.nome);
 
   return NextResponse.json({
     ok: true,
     dados: {
       matricula: servidor.matricula,
       nome: servidor.nome,
-      respostaRecursoUrl
+      respostaRecursoUrl,
+      recursoApresentadoUrl
     }
   });
 }
