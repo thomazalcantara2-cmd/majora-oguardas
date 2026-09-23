@@ -8,6 +8,12 @@
  * planilha — o Apps Script roda com as permissões de quem implantou o
  * script, então não é preciso compartilhar a planilha com mais ninguém
  * (nem criar conta de serviço no Google Cloud).
+ *
+ * Nesta fase o app só consulta: CPF + senha (últimos 4 dígitos do CPF) dão
+ * acesso à resposta da SEGEP ao recurso apresentado, para os poucos
+ * servidores que enviaram um. Não há mais geração de PDF nem upload de
+ * arquivo pelo app — quem coloca a resposta na pasta do servidor é a
+ * própria SEGEP, manualmente.
  */
 
 var COLUNAS = [
@@ -21,11 +27,11 @@ var COLUNAS = [
   'link do Requerimento', // H
   'link do Anexo', // I
   'link da minuta do voto', // J
-  'Recurso', // K — link do PDF do recurso, escrito pelo app
-  'Data_Recurso', // L — escrito pelo app
-  'Tentativas_Falhas', // M — escrito pelo app
-  'Bloqueado_Até', // N — escrito pelo app
-  'Anexo_Recurso' // O — link do anexo do recurso (opcional), escrito pelo app
+  'Recurso', // K — histórico: link do recurso apresentado (fase anterior)
+  'Data_Recurso', // L — histórico: data/hora do recurso apresentado
+  'Tentativas_Falhas', // M — escrito pelo app (controle de tentativas de senha)
+  'Bloqueado_Até', // N — escrito pelo app (bloqueio temporário)
+  'Anexo_Recurso' // O — histórico: link do anexo do recurso apresentado
 ];
 var ABA_LOG = 'Log_Eventos';
 
@@ -65,15 +71,8 @@ function doPost(e) {
       case 'registrarEvento':
         registrarEvento_(payload.matricula, payload.tipo);
         return responderJson_({ ok: true });
-      case 'salvarPdfRecurso':
-        return responderJson_({ ok: true, url: salvarPdfRecurso_(payload.nome, payload.base64, payload.carimbo) });
-      case 'salvarAnexoRecurso':
-        return responderJson_({
-          ok: true,
-          url: salvarAnexoRecurso_(payload.nome, payload.base64, payload.nomeArquivo, payload.tipo, payload.carimbo)
-        });
-      case 'obterLinkResposta':
-        return responderJson_({ ok: true, url: obterLinkResposta_(payload.nome) });
+      case 'obterLinkRespostaRecurso':
+        return responderJson_({ ok: true, url: obterLinkRespostaRecurso_(payload.nome) });
       default:
         return responderJson_({ ok: false, erro: 'Ação desconhecida: ' + payload.acao });
     }
@@ -165,7 +164,7 @@ function getPastaServidor_(nome) {
   return subpastas.next();
 }
 
-/** Acha, dentro de uma pasta, o primeiro PDF cujo nome contém um termo
+/** Acha, dentro de uma pasta, o PDF mais recente cujo nome contém um termo
  * (sem diferenciar maiúsculas/minúsculas). Devolve null se não achar. */
 function localizarPdfNaPasta_(pasta, termo) {
   var termoNormalizado = termo.toUpperCase();
@@ -183,83 +182,17 @@ function localizarPdfNaPasta_(pasta, termo) {
 }
 
 /**
- * Procura, na pasta do servidor, o PDF da resposta (Minuta de Voto —
- * convertida manualmente de .docx para PDF e deixada na mesma pasta).
- * Devolve '' se ainda não existir (o app do Vercel cai para o PDF
- * empacotado no próprio código, como plano B).
+ * Procura, na pasta do servidor, o PDF com a resposta da SEGEP ao recurso
+ * apresentado — a SEGEP coloca esse arquivo manualmente na pasta do
+ * servidor, com "RESPOSTA" em algum lugar do nome (ex:
+ * "RESPOSTA_RECURSO_NOME_DO_SERVIDOR.pdf"). Devolve '' se ainda não
+ * existir (o app mostra "ainda não disponível" nesse caso).
  */
-function obterLinkResposta_(nome) {
+function obterLinkRespostaRecurso_(nome) {
   var pasta = getPastaServidor_(nome);
-  var arquivo = localizarPdfNaPasta_(pasta, 'MINUTA');
+  var arquivo = localizarPdfNaPasta_(pasta, 'RESPOSTA');
   if (!arquivo) return '';
   arquivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  return arquivo.getUrl();
-}
-
-/** Mesma limpeza de nome usada no processo antigo para nomear arquivos:
- * maiúsculas, só letras/números/espaço, sem sobras nas pontas. */
-function limparNomeArquivo_(nome) {
-  return String(nome || '')
-    .replace(/[^a-zA-Z0-9À-ÿ ]/g, '')
-    .trim()
-    .toUpperCase();
-}
-
-/** Um carimbo de data/hora para nomear arquivo (sem barras/dois-pontos),
- * usado como plano B caso o Next.js não tenha mandado um (payload.carimbo). */
-function gerarCarimbo_() {
-  return Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'America/Recife', 'dd-MM-yyyy_HH-mm-ss');
-}
-
-/**
- * Cria um arquivo na pasta do servidor. Cada chamada gera um arquivo NOVO
- * (o nome inclui um carimbo de data/hora) — nunca mexe em arquivos de
- * envios anteriores, então apagar um arquivo manualmente no Drive não afeta
- * os próximos envios. Devolve o arquivo criado.
- */
-function criarArquivoNaPasta_(pasta, nomeArquivo, blob) {
-  var arquivo = pasta.createFile(blob);
-  arquivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  return arquivo;
-}
-
-/**
- * Recebe o PDF do recurso (base64) e salva na pasta do próprio servidor,
- * como "RECURSO_<NOME DO SERVIDOR>_<carimbo>.pdf". Devolve a URL do
- * arquivo.
- */
-function salvarPdfRecurso_(nome, base64, carimbo) {
-  if (!base64) throw new Error('PDF vazio.');
-  var pasta = getPastaServidor_(nome);
-  var nomeArquivo = 'RECURSO_' + limparNomeArquivo_(nome) + '_' + (carimbo || gerarCarimbo_()) + '.pdf';
-  var bytes = Utilities.base64Decode(base64);
-  var blob = Utilities.newBlob(bytes, 'application/pdf', nomeArquivo);
-  var arquivo = criarArquivoNaPasta_(pasta, nomeArquivo, blob);
-  return arquivo.getUrl();
-}
-
-/**
- * Recebe o anexo do recurso (base64) e salva na pasta do próprio servidor,
- * como "ANEXO_REQUERIMENTO_<NOME DO SERVIDOR>_<carimbo>.<extensão
- * original>" — nome diferente do PDF do recurso (que começa com
- * "RECURSO_"), para não ficarem parecidos na pasta; usa o mesmo carimbo do
- * PDF do recurso (quando o Next.js manda o mesmo `carimbo` para os dois)
- * para os dois ficarem identificáveis como o mesmo envio. Devolve a URL do
- * arquivo.
- */
-function salvarAnexoRecurso_(nome, base64, nomeArquivoOriginal, tipoMime, carimbo) {
-  if (!base64) throw new Error('Anexo vazio.');
-  var pasta = getPastaServidor_(nome);
-
-  var extensao = '';
-  if (nomeArquivoOriginal && nomeArquivoOriginal.indexOf('.') !== -1) {
-    extensao = '.' + nomeArquivoOriginal.split('.').pop();
-  }
-  var nomeArquivo = 'ANEXO_REQUERIMENTO_' + limparNomeArquivo_(nome) + '_' + (carimbo || gerarCarimbo_()) + extensao;
-
-  var bytes = Utilities.base64Decode(base64);
-  var blob = Utilities.newBlob(bytes, tipoMime || 'application/octet-stream', nomeArquivo);
-  var arquivo = criarArquivoNaPasta_(pasta, nomeArquivo, blob);
   return arquivo.getUrl();
 }
 

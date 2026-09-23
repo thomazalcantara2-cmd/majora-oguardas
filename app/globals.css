@@ -8,13 +8,10 @@
   --line-soft: #edf1f8;
   --brand: #0a32b4;
   --brand-strong: #082788;
-  --brand-soft: #ecf0fd;
   --brand-ink: #ffffff;
   --amarelo: #ffc20e;
   --laranja: #f59300;
   --success: #00a03e;
-  --success-bg: #e2f5e9;
-  --success-line: #b7e0c8;
   --error: #b3261e;
   --error-bg: #fbe7e5;
   --error-line: #f1c2bd;
@@ -39,13 +36,10 @@
     --line-soft: #232b4a;
     --brand: #7d9dff;
     --brand-strong: #a3bcff;
-    --brand-soft: #202a4c;
     --brand-ink: #0b1330;
     --amarelo: #ffc94d;
     --laranja: #ff9f3d;
     --success: #3fcf7f;
-    --success-bg: #123625;
-    --success-line: #1f5a3c;
     --error: #f2887e;
     --error-bg: #3a1815;
     --error-line: #5c2620;
@@ -321,8 +315,7 @@ body {
   font-size: 0.88rem;
 }
 
-label,
-.field-label {
+label {
   display: block;
   font-weight: 700;
   font-size: 0.72rem;
@@ -445,105 +438,6 @@ textarea {
   margin: 12px 2px 0;
 }
 
-.pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 0.76rem;
-  font-weight: 700;
-}
-
-.pill::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-}
-
-.pill-pending {
-  background: var(--warn-bg);
-  color: var(--warn-text);
-}
-
-.pill-pending::before {
-  background: var(--warn-text);
-}
-
-.pill-confirmed {
-  background: var(--success-bg);
-  color: var(--success);
-}
-
-.pill-confirmed::before {
-  background: var(--success);
-}
-
-.pill-denied {
-  background: var(--error-bg);
-  color: var(--error);
-}
-
-.pill-denied::before {
-  background: var(--error);
-}
-
-.sep {
-  border: none;
-  border-top: 1px solid var(--line-soft);
-  margin: 22px 0;
-}
-
-.stamp-wrap {
-  display: flex;
-  justify-content: center;
-  margin: 4px 0 16px;
-}
-
-.stamp {
-  width: 108px;
-  height: 108px;
-  border-radius: 50%;
-  border: 3px solid var(--success);
-  color: var(--success);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transform: rotate(-8deg);
-  position: relative;
-}
-
-.stamp::before {
-  content: '';
-  position: absolute;
-  inset: 6px;
-  border: 1px dashed var(--success);
-  border-radius: 50%;
-}
-
-.stamp svg {
-  width: 44px;
-  height: 44px;
-}
-
-.success-box {
-  text-align: center;
-}
-
-.success-box .protocolo {
-  margin-top: 14px;
-  padding: 12px;
-  background: var(--paper);
-  border-radius: 10px;
-  font-size: 0.8rem;
-  color: var(--ink-soft);
-}
-
-.success-box .protocolo .mono {
-  color: var(--ink);
-}
-
 .loading-overlay {
   position: fixed;
   inset: 0;
@@ -579,8 +473,5 @@ textarea {
 @media (prefers-reduced-motion: reduce) {
   .spinner {
     animation-duration: 1.6s;
-  }
-  .stepper .tick::after {
-    transition: none;
   }
 }

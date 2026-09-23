@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { buscarServidorPorCpf, normalizarCpf, somenteDigitos } from '../../../lib/db';
 
 const MENSAGEM_ERRO_CPF =
-  'Não encontramos esse CPF na base de servidores que apresentaram manifestação. Verifique os números digitados.';
+  'Não encontramos esse CPF na base de servidores com recurso em análise. Verifique os números digitados.';
 
 export async function POST(request) {
   let body;

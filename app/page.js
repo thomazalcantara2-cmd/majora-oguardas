@@ -2,20 +2,9 @@
 
 import { useState, Fragment } from 'react';
 
-const STEPS = ['search', 'password', 'data', 'success'];
-const GRUPO_DA_ETAPA = { search: 0, password: 0, data: 1, success: 2 };
-const GRUPOS = ['Identificação', 'Manifestação', 'Protocolo'];
-const TAMANHO_MAXIMO_TEXTO = 8000;
-const TAMANHO_MAXIMO_ANEXO = 3 * 1024 * 1024; // 3 MB
-
-function lerArquivoComoBase64(arquivo) {
-  return new Promise((resolve, reject) => {
-    const leitor = new FileReader();
-    leitor.onload = () => resolve(String(leitor.result).split(',')[1] || '');
-    leitor.onerror = () => reject(leitor.error);
-    leitor.readAsDataURL(arquivo);
-  });
-}
+const STEPS = ['search', 'password', 'data'];
+const GRUPO_DA_ETAPA = { search: 0, password: 0, data: 1 };
+const GRUPOS = ['Identificação', 'Resposta ao Recurso'];
 
 export default function Page() {
   const [step, setStep] = useState('search');
@@ -29,14 +18,7 @@ export default function Page() {
   const [senha, setSenha] = useState('');
   const [passwordError, setPasswordError] = useState('');
 
-  const [token, setToken] = useState(null);
   const [dados, setDados] = useState(null);
-
-  const [recursoTexto, setRecursoTexto] = useState('');
-  const [recursoAnexo, setRecursoAnexo] = useState(null);
-  const [editandoRecurso, setEditandoRecurso] = useState(false);
-  const [submitError, setSubmitError] = useState('');
-  const [successInfo, setSuccessInfo] = useState(null);
 
   function irParaEtapa(novaEtapa) {
     setStep(novaEtapa);
@@ -93,68 +75,10 @@ export default function Page() {
         setSenha('');
         return;
       }
-      setToken(json.token);
       setDados(json.dados);
-      setRecursoTexto('');
-      setRecursoAnexo(null);
-      setEditandoRecurso(!json.dados.recursoJaEnviado);
-      setSubmitError('');
       irParaEtapa('data');
     } catch (err) {
       setPasswordError('Erro ao validar. Tente novamente.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function enviarRecurso() {
-    setSubmitError('');
-    const texto = recursoTexto.trim();
-    if (!texto) {
-      setSubmitError('Escreva o texto do recurso antes de enviar.');
-      return;
-    }
-    if (texto.length > TAMANHO_MAXIMO_TEXTO) {
-      setSubmitError(`O texto excede o tamanho máximo permitido (${TAMANHO_MAXIMO_TEXTO} caracteres).`);
-      return;
-    }
-    if (!token) {
-      setSubmitError('Sessão expirada. Refaça a identificação por CPF e a validação de senha.');
-      return;
-    }
-
-    let anexo = null;
-    if (recursoAnexo) {
-      if (recursoAnexo.size > TAMANHO_MAXIMO_ANEXO) {
-        setSubmitError('O anexo excede o tamanho máximo permitido (3 MB).');
-        return;
-      }
-      try {
-        const conteudoBase64 = await lerArquivoComoBase64(recursoAnexo);
-        anexo = { nomeArquivo: recursoAnexo.name, tipo: recursoAnexo.type, conteudoBase64 };
-      } catch (err) {
-        setSubmitError('Não foi possível ler o arquivo anexado. Tente novamente.');
-        return;
-      }
-    }
-
-    setLoading(true);
-    try {
-      const resp = await fetch('/api/recurso', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, texto, anexo })
-      });
-      const json = await resp.json();
-      if (!json.ok) {
-        setSubmitError(json.message || 'Não foi possível registrar. Tente novamente.');
-        return;
-      }
-      setSuccessInfo(json);
-      setRecursoAnexo(null);
-      irParaEtapa('success');
-    } catch (err) {
-      setSubmitError('Erro ao registrar. Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -185,9 +109,8 @@ export default function Page() {
               de jornada
             </h1>
             <p className="hero-lede">
-              Consulte a resposta à sua manifestação sobre a relação e a classificação preliminar para a majoração da
-              jornada dos Guardas Municipais de 30 (trinta) para 40 (quarenta) horas. Caso necessário, apresente
-              recurso dentro do prazo estabelecido.
+              Consulte a resposta da SEGEP ao recurso apresentado sobre a majoração da jornada dos Guardas Municipais
+              de 30 (trinta) para 40 (quarenta) horas.
             </p>
           </div>
         </div>
@@ -280,13 +203,8 @@ export default function Page() {
 
         {step === 'data' && dados && (
           <section className="card">
-            <h2>Sua manifestação</h2>
-            <p className="lede">Confira abaixo a decisão sobre a sua manifestação e baixe a resposta completa.</p>
-
-            <p className="field-label">Status da Manifestação</p>
-            <span className={`pill ${dados.status === 'Deferido' ? 'pill-confirmed' : 'pill-denied'}`}>
-              {dados.status}
-            </span>
+            <h2>Resposta ao seu recurso</h2>
+            <p className="lede">Confira abaixo a resposta da SEGEP ao recurso administrativo que você apresentou.</p>
 
             <label htmlFor="f-matricula">Matrícula</label>
             <input id="f-matricula" type="text" className="mono" value={dados.matricula} disabled readOnly />
@@ -294,113 +212,21 @@ export default function Page() {
             <label htmlFor="f-nome">Nome</label>
             <input id="f-nome" type="text" value={dados.nome} disabled readOnly />
 
-            <label htmlFor="f-classe">Classe</label>
-            <input id="f-classe" type="text" value={dados.classe} disabled readOnly />
-
-            <a
-              href={dados.respostaUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-primary"
-              style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}
-            >
-              Baixar minha resposta (PDF)
-            </a>
-
-            <hr className="sep" />
-
-            <h2 style={{ marginBottom: 2 }}>Recurso</h2>
-            <p className="lede">
-              Se quiser contestar a decisão acima, escreva seu recurso abaixo. O texto é transformado em PDF e
-              enviado à SEGEP para análise.
-            </p>
-
-            {dados.recursoJaEnviado && !editandoRecurso ? (
-              <>
-                <p className="msg msg-warn">Recurso já apresentado em {dados.dataRecurso}.</p>
-                {dados.recursoPdfUrl && (
-                  <a href={dados.recursoPdfUrl} target="_blank" rel="noreferrer" className="btn btn-primary">
-                    Baixar meu recurso (PDF)
-                  </a>
-                )}
-                {dados.anexoRecursoUrl && (
-                  <a
-                    href={dados.anexoRecursoUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn-ghost"
-                    style={{ display: 'block', marginTop: 10 }}
-                  >
-                    Baixar anexo enviado
-                  </a>
-                )}
-                <button type="button" className="btn-ghost" style={{ marginTop: 16 }} onClick={() => setEditandoRecurso(true)}>
-                  Enviar um novo recurso (substitui o anterior)
-                </button>
-              </>
+            {dados.respostaRecursoUrl ? (
+              <a
+                href={dados.respostaRecursoUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-primary"
+                style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}
+              >
+                Baixar resposta ao recurso (PDF)
+              </a>
             ) : (
-              <>
-                <label htmlFor="f-recurso-texto">Texto do recurso</label>
-                <textarea
-                  id="f-recurso-texto"
-                  maxLength={TAMANHO_MAXIMO_TEXTO}
-                  placeholder="Escreva aqui o seu recurso..."
-                  value={recursoTexto}
-                  onChange={(e) => setRecursoTexto(e.target.value)}
-                />
-                <label htmlFor="f-recurso-anexo">Anexo (opcional)</label>
-                <input
-                  id="f-recurso-anexo"
-                  type="file"
-                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                  onChange={(e) => setRecursoAnexo(e.target.files && e.target.files[0] ? e.target.files[0] : null)}
-                />
-                <p className="field-hint">PDF, imagem ou Word — até 3 MB.</p>
-                <button type="button" className="btn btn-primary" onClick={enviarRecurso} disabled={loading}>
-                  Enviar recurso
-                </button>
-                {submitError && <p className="msg msg-error">{submitError}</p>}
-              </>
+              <p className="msg msg-warn">
+                A resposta ao seu recurso ainda não está disponível para consulta. Tente novamente mais tarde.
+              </p>
             )}
-          </section>
-        )}
-
-        {step === 'success' && successInfo && (
-          <section className="card">
-            <div className="success-box">
-              <div className="stamp-wrap">
-                <div className="stamp">
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <polyline points="4 12.5 9.5 18 20 6"></polyline>
-                  </svg>
-                </div>
-              </div>
-              <h2>Recurso enviado!</h2>
-              <p>Seu recurso foi registrado com sucesso. Registrado em {successInfo.timestamp}.</p>
-              {successInfo.recursoPdfUrl && (
-                <a href={successInfo.recursoPdfUrl} target="_blank" rel="noreferrer" className="btn btn-primary">
-                  Baixar meu recurso (PDF)
-                </a>
-              )}
-              {successInfo.anexoUrl && (
-                <a
-                  href={successInfo.anexoUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn-ghost"
-                  style={{ display: 'block', textAlign: 'center', marginTop: 10 }}
-                >
-                  Baixar anexo enviado
-                </a>
-              )}
-            </div>
           </section>
         )}
 

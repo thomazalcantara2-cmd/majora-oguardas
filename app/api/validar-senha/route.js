@@ -4,13 +4,11 @@ import {
   registrarTentativaFalha,
   zerarTentativas,
   registrarAcessoResposta,
-  obterLinkResposta,
+  obterLinkRespostaRecurso,
   MAX_TENTATIVAS,
   normalizarCpf,
   somenteDigitos
 } from '../../../lib/db';
-import { emitirToken } from '../../../lib/session';
-import { formatarData } from '../../../lib/format';
 
 const MENSAGEM_ERRO_SENHA = 'Não foi possível confirmar sua identidade. Verifique a senha e tente novamente.';
 
@@ -60,22 +58,14 @@ export async function POST(request) {
 
   await zerarTentativas(id);
   await registrarAcessoResposta(servidor.matricula);
-  const token = await emitirToken(id);
-  const respostaUrl = await obterLinkResposta(servidor.nome, servidor.matricula_key);
+  const respostaRecursoUrl = await obterLinkRespostaRecurso(servidor.nome);
 
   return NextResponse.json({
     ok: true,
-    token,
     dados: {
       matricula: servidor.matricula,
       nome: servidor.nome,
-      classe: servidor.classe || '',
-      status: servidor.status,
-      respostaUrl,
-      recursoJaEnviado: Boolean(servidor.recurso_pdf_url),
-      dataRecurso: servidor.data_recurso ? formatarData(servidor.data_recurso, true) : '',
-      recursoPdfUrl: servidor.recurso_pdf_url || '',
-      anexoRecursoUrl: servidor.anexo_recurso_url || ''
+      respostaRecursoUrl
     }
   });
 }
